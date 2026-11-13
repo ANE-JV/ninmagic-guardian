@@ -10,6 +10,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -60,7 +61,7 @@ def patch():
     dest.mkdir()
     for name in ("guardian_core.c","guardian_sha256.c","guardian_core.h","guardian_sha256.h","guardian_addons.c","guardian_addons.h"):
         shutil.copy2(find_source(name),dest/name)
-    for name in ("guardian_fatfs.c","guardian_fatfs.h","guardian_format.c","test_format.c"):
+    for name in ("guardian_fatfs.c","guardian_fatfs.h","guardian_format.c","test_format.c","guardian_entry.S","guardian_cid.c","guardian_cid.h","test_cid.c"):
         shutil.copy2(ROOT/"rescue"/name,dest/name)
     shutil.copy2(ROOT/"rescue"/"main.c",STAGE/"bootloader"/"main.c")
     makefile=STAGE/"Makefile"
@@ -68,12 +69,12 @@ def patch():
     begin=source.index("# Main and graphics.")
     end=source.index("GFX_INC",begin)
     source=source[:begin]+'''# Guardian build: SD-only. No eMMC/emuMMC, HOS, L4T, UMS or Nyx.
-OBJS = start exception_handlers main heap gfx \\
+OBJS = start exception_handlers guardian_entry main heap gfx \\
  bpmp ccplex clock di i2c irq timer mc sdram minerva smmu \\
  gpio pinmux pmc se tsec uart fuse kfuse sdmmc sdmmc_driver sd \\
  bq24193 max17050 max7762x max77620-rtc hw_init btn ianos util config \\
  diskio ff ffunicode ffsystem elfload elfreloc_arm \\
- guardian_core guardian_sha256 guardian_addons guardian_fatfs guardian_format
+ guardian_core guardian_sha256 guardian_addons guardian_fatfs guardian_format guardian_cid
 OBJS := $(addsuffix .o, $(OBJS))
 OBJS := $(addprefix $(BUILDTDIR)/, $(OBJS))
 BDKINC += -I./bootloader/guardian
@@ -81,6 +82,7 @@ BDKINC += -I./bootloader/guardian
 '''+source[end:]
     source=source.replace(" -DBDK_EMUMMC_ENABLE","")
     source=source.replace("# BDK defines.","CUSTOMDEFINES += -Dsnprintf=guardian_snprintf\n\n# BDK defines.")
+    source=source.replace("-fno-inline -std=gnu11","-fno-inline -fstack-usage -Wstack-usage=8192 -std=gnu11")
     source=source.replace("MODULEDIRS := $(wildcard modules/*)","MODULEDIRS := modules/hekate_libsys_minerva")
     source=source.replace("NYXDIR := $(wildcard nyx)","NYXDIR :=")
     source=source.replace("TARGET := hekate","TARGET := ninmagic-guardian-rescue")
@@ -154,7 +156,19 @@ def main():
     addresses={line.split()[-1]:int(line.split()[0],16) for line in symbols.splitlines() if len(line.split())>=3 and re.fullmatch(r"[0-9a-fA-F]+",line.split()[0])}
     iram_bytes=addresses["__bss_end"]-addresses["__ipl_start"]
     if iram_bytes>140288: raise RuntimeError("Rescue including BSS exceeds safe IRAM budget")
+    if addresses["__bss_end"]>=0x40031000: raise RuntimeError("Payload overlaps dedicated IRAM stack")
+    audit_text=subprocess.check_output([sys.executable,str(ROOT/"rescue/check_entry.py"),"--elf",str(STAGE/"build/ninmagic-guardian-rescue/ninmagic-guardian-rescue.elf"),"--objdump",str(kit/"devkitARM/bin/arm-none-eabi-objdump.exe")],text=True)
+    entry_audit=json.loads(audit_text)
+    stack=[]
+    for usage in (STAGE/"build/ninmagic-guardian-rescue").glob("*.su"):
+        for line in usage.read_text().splitlines():
+            fields=line.split("\t")
+            if len(fields)==3:
+                function=fields[0].rsplit(":",1)[-1]
+                if function in linked:stack.append({"function":function,"frame_bytes":int(fields[1]),"kind":fields[2]})
+    stack.sort(key=lambda x:x["frame_bytes"],reverse=True)
     DIST.mkdir(parents=True,exist_ok=True)
+    (DIST/"stack-usage.json").write_text(json.dumps({"entry":entry_audit,"largest_linked_frames":stack},indent=2))
     for name in ("ninmagic-guardian-rescue.bin","libsys_minerva.bso"):
         shutil.copy2(STAGE/"output"/name,DIST/name)
     embedded=ROOT/"romfs/rescue"
@@ -170,7 +184,7 @@ def main():
             rel=path.relative_to(STAGE)
             if path.is_file() and not any(x in ("build","output") for x in rel.parts):
                 tar.add(path,arcname=str(Path("NinMagic-Guardian-Rescue-source")/rel))
-    info={"source_commit":COMMIT,"source_archive_sha256":hashlib.sha256(archive.read_bytes()).hexdigest(),"uncompressed_bytes":unc.stat().st_size,"iram_including_bss_bytes":iram_bytes,"hardware_tested":False,"non_sd_symbols_absent":list(forbidden),"files":{p.name:{"bytes":p.stat().st_size,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in DIST.iterdir() if p.is_file() and p.name!="build-info.json"}}
+    info={"source_commit":COMMIT,"source_archive_sha256":hashlib.sha256(archive.read_bytes()).hexdigest(),"uncompressed_bytes":unc.stat().st_size,"iram_including_bss_bytes":iram_bytes,"entry_audit":entry_audit,"hardware_tested":False,"non_sd_symbols_absent":list(forbidden),"files":{p.name:{"bytes":p.stat().st_size,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in DIST.iterdir() if p.is_file() and p.name!="build-info.json"}}
     (DIST/"build-info.json").write_text(json.dumps(info,indent=2))
     print(json.dumps(info,indent=2))
     print("Source:",source_tar)

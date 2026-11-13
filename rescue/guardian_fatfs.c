@@ -7,6 +7,19 @@
 #include <libs/fatfs/ff.h>
 #include <libs/fatfs/diskio.h>
 #include "guardian_fatfs.h"
+#include "guardian_cid.h"
+
+static guardian_fs_error last_error;
+static void copy_text(char *out,size_t cap,const char *s) {
+    size_t n=strlen(s); if (n>=cap) n=cap-1; memcpy(out,s,n); out[n]=0;
+}
+static void remember_error(int code,const char *operation,const char *path) {
+    if (last_error.code || !code) return;
+    last_error.code=code; copy_text(last_error.operation,sizeof(last_error.operation),operation);
+    copy_text(last_error.path,sizeof(last_error.path),path?path:"archivo abierto");
+}
+void guardian_fatfs_clear_error(void) { memset(&last_error,0,sizeof(last_error)); }
+const guardian_fs_error *guardian_fatfs_last_error(void) { return &last_error; }
 
 static int path_ok(const char *p) {
     size_t n,begin=0; char segment[GC_PATH_MAX+1];
@@ -26,38 +39,38 @@ static int path_ok(const char *p) {
 static gc_type type_of(const FILINFO *i) { return (i->fattrib & AM_DIR) ? GC_DIR : GC_FILE; }
 static int fs_stat(void *u,const char *p,gc_stat *o) {
     FILINFO i; FRESULT r; (void)u;
-    if (!path_ok(p)) return -1;
+    if (!path_ok(p)) { remember_error(-1,"ruta",p); return -1; }
     r=f_stat(p,&i);
     if (r==FR_NO_FILE || r==FR_NO_PATH) return 0;
-    if (r!=FR_OK) return -1;
+    if (r!=FR_OK) { remember_error(r,"consultar",p); return -1; }
     o->type=type_of(&i); o->size=i.fsize; return 1;
 }
 static int fs_list(void *u,const char *p,gc_visit v,void *vu) {
     DIR d; FILINFO i; FRESULT r; int out=0; (void)u;
-    if (p && *p && !path_ok(p)) return -1;
-    if (f_opendir(&d,p && *p?p:"/")!=FR_OK) return -1;
+    if (p && *p && !path_ok(p)) { remember_error(-1,"ruta",p); return -1; }
+    r=f_opendir(&d,p && *p?p:"/"); if (r!=FR_OK) { remember_error(r,"abrir carpeta",p); return -1; }
     for (;;) {
         r=f_readdir(&d,&i);
-        if (r!=FR_OK) { out=-1; break; }
+        if (r!=FR_OK) { remember_error(r,"listar",p); out=-1; break; }
         if (!i.fname[0]) break;
         if (!strcmp(i.fname,".") || !strcmp(i.fname,"..")) continue;
         if (strchr(i.fname,'/') || strchr(i.fname,'\\') || strchr(i.fname,':')) { out=-1; break; }
         if (v(vu,i.fname,type_of(&i))) { out=-1; break; }
     }
-    if (f_closedir(&d)!=FR_OK) out=-1;
+    r=f_closedir(&d); if (r!=FR_OK) { remember_error(r,"cerrar carpeta",p); out=-1; }
     return out;
 }
 static void *fs_open(void *u,const char *p,char mode) {
-    FIL *f; BYTE m; (void)u;
+    FIL *f; BYTE m; FRESULT r; (void)u;
     if (!path_ok(p) || (mode!='r' && mode!='x')) return NULL;
     m=mode=='r'?FA_READ:(FA_WRITE|FA_CREATE_NEW);
     f=calloc(1,sizeof(*f)); if (!f) return NULL;
-    if (f_open(f,p,m)!=FR_OK) { free(f); return NULL; }
+    r=f_open(f,p,m); if (r!=FR_OK) { remember_error(r,"abrir archivo",p); free(f); return NULL; }
     return f;
 }
 static int fs_read(void *u,void *f,void *b,size_t n,size_t *got) {
     UINT count=0; FRESULT r; (void)u; if (n>0x7fffffffU) return -1;
-    r=f_read(f,b,(UINT)n,&count); *got=count; return r==FR_OK?0:-1;
+    r=f_read(f,b,(UINT)n,&count); *got=count; if(r!=FR_OK)remember_error(r,"leer",NULL); return r==FR_OK?0:-1;
 }
 static int fs_write(void *u,void *f,const void *b,size_t n) {
     UINT count=0; (void)u; if (n>0x7fffffffU) return -1;
@@ -85,33 +98,20 @@ static int fs_free(void *u,uint64_t *n) {
     if (f_getfree("",&clusters,&f)!=FR_OK) return -1;
     *n=(uint64_t)clusters*f->csize*512U; return 0;
 }
-static void cid_hex(char *out,const u8 *bytes) {
-    static const char h[]="0123456789abcdef"; unsigned j;
-    for (j=0;j<16;j++) { out[j*2]=h[bytes[j]>>4]; out[j*2+1]=h[bytes[j]&15]; }
-    out[32]=0;
-}
-/* Horizon and SDMMC implementations expose the same 128-bit CID with different
- * byte/word ordering. Match ONLY a permutation of this physical SD's CID. */
 int guardian_match_sd_identity(gc_context *ctx,const char *expected) {
-    u8 b[16]; char hex[33]; unsigned mode,j;
-    if (!expected || strlen(expected)!=32) return 0;
-    for (mode=0;mode<4;mode++) {
-        for (j=0;j<16;j++) {
-            unsigned k=j;
-            if (mode&1) k=(3-(k/4))*4+(k%4);
-            if (mode&2) k=(k/4)*4+(3-(k%4));
-            b[j]=sd_storage.raw_cid[k];
-        }
-        cid_hex(hex,b);
-        if (!strcmp(hex,expected)) { memcpy(ctx->identity,hex,33); return 1; }
-    }
+    if (guardian_cid_match(sd_storage.raw_cid,expected,ctx->identity)) return 1;
     memset(ctx->identity,0,sizeof(ctx->identity)); return 0;
+}
+void guardian_sd_cids(char raw[33],char sdk[33]) {
+    unsigned char bytes[16]; guardian_cid_hex(raw,sd_storage.raw_cid);
+    if (guardian_cid_sdk_bytes(bytes,sd_storage.raw_cid)) guardian_cid_hex(sdk,bytes);
+    else strcpy(sdk,"no disponible");
 }
 void guardian_fatfs_init(gc_context *c) {
     memset(c,0,sizeof(*c));
     c->fs=(gc_fs){NULL,fs_stat,fs_list,fs_open,fs_read,fs_write,fs_file_sync,
         fs_close,fs_mkdir,fs_rename,fs_remove,fs_sync,fs_free,NULL};
-    cid_hex(c->identity,sd_storage.raw_cid);
+    guardian_cid_hex(c->identity,sd_storage.raw_cid);
     strcpy(c->firmware,"Preboot SD rescue");
     strcpy(c->model,hw_get_chip_id()==GP_HIDREV_MAJOR_T210B01?"Mariko":"Erista");
     strcpy(c->created,"preboot");

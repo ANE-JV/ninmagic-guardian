@@ -22,8 +22,11 @@ Si el Hekate principal no inicia, este payload puede elegirse/injectarse como
 un payload de rescate mediante el metodo compatible con esa consola. No repara
 un lector SD averiado ni una tarjeta que no se puede leer.
 
-Controles: VOL +/- mueve la seleccion y POWER confirma. La restauracion exige
-otra confirmacion. Hay una opcion de apagar para regresar al arranque habitual.
+Controles: VOL +/- mueve la seleccion y POWER confirma. En pantallas de resultado
+o error, VOL +/- o POWER regresa al menu; el pie aparece en una posicion fija.
+La restauracion exige otra confirmacion. El menu ofrece salir apagando o
+reiniciando la consola. Reiniciar usa su metodo habitual de arranque; puede
+necesitar su payload y no garantiza regresar a Hekate.
 
 ## Respaldo y limites
 
@@ -40,10 +43,19 @@ los modulos y el `romfs` del tema HOME fijo; los mods de juegos permanecen.
 Se pueden reactivar los elementos apartados, sin sustituir destinos existentes.
 
 La identidad del NRO es el CID crudo de 16 bytes que devuelve libnx, expresado
-en 32 digitos hexadecimales minusculos. El rescatador solo acepta una de las
-cuatro permutaciones byte/palabra del CID de la SD fisica que esta leyendo.
-Eso normaliza el orden del registro; no acepta otra tarjeta ni una identidad
-arbitraria tomada del manifiesto.
+en 32 digitos hexadecimales minusculos. La 0.1.1 invierte exactamente el
+desplazamiento de ocho bits que Hekate aplica a los cuatro registros SDHCI R2,
+para obtener la representacion de GetResponse/SetCid/GetCid del SDK. Compara
+los 16 bytes completos; no ignora ni enmascara campos. Tambien conserva las
+comparaciones exactas por orden byte/palabra para formatos anteriores.
+Las diferencias entre respaldo ausente, lectura/manifiesto danado y CID distinto
+se muestran por separado, con el mensaje del motor y diagnostico de FatFs/CID.
+
+La entrada 0.1.1 cambia la pila exclusivamente en un trampoline ensamblador,
+antes de entrar a una funcion C con variables locales. Reserva 56 KiB de IRAM
+entre 0x40031000 y 0x4003F000, separado del payload, parametros DRAM y pilas de
+interrupciones. `check_entry.py` valida tanto la fuente como el ELF enlazado;
+la compilacion genera el informe de GCC `stack-usage.json`.
 
 El rescate no conoce el firmware instalado en NAND. Antes de confirmar muestra
 el firmware anotado en la copia: restaurar un Atmosphere antiguo tras actualizar

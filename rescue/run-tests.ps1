@@ -6,6 +6,12 @@ $guardianPreviousPath = $env:PATH
 $env:PATH = "C:/devkitPro/msys2/usr/bin;$env:PATH"
 Push-Location -LiteralPath $guardianRoot
 try {
+    & python rescue/check_entry.py
+    if ($LASTEXITCODE -ne 0) { throw 'La entrada de rescate contiene un cambio de pila inseguro.' }
+    & $guardianCompiler -std=c99 -Wall -Wextra -Werror -O2 rescue/guardian_cid.c rescue/test_cid.c -o (Join-Path $guardianTemp 'guardian-cid-test.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la prueba de identidad SD.' }
+    & (Join-Path $guardianTemp 'guardian-cid-test.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Ha fallado la comparación exacta de la identidad SD.' }
     & $guardianCompiler -std=c99 -Wall -Wextra -Werror -O2 rescue/guardian_format.c rescue/test_format.c -o (Join-Path $guardianTemp 'guardian-format-test.exe')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la prueba del formato de rescate.' }
     & (Join-Path $guardianTemp 'guardian-format-test.exe')

@@ -30,6 +30,7 @@ typedef struct {
   char error[512];
   unsigned char *buf;
   uint64_t done, total;
+  int preserve_rescue;
 } operation;
 
 static int fail(operation *o, const char *text) {
@@ -97,6 +98,11 @@ int gc_safe_path(const char *p) {
   return n && p[-1] != '.' && p[-1] != ' ' && !(n == 1 && start[0] == '.') &&
          !(n == 2 && start[0] == '.' && start[1] == '.');
 }
+static int owned_rescue(const char *p) {
+  return eqi(p,
+             "config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin") ||
+         eqi(p, "config/NinMagicGuardian/rescue/libsys_minerva.bso");
+}
 int gc_managed_path(const char *p, unsigned options) {
   const char *q;
   if (!gc_safe_path(p) || options > 3)
@@ -112,8 +118,9 @@ int gc_managed_path(const char *p, unsigned options) {
   if (eqi(p, "bootloader/hekate_ipl.ini") || eqi(p, "bootloader/nyx.ini") ||
       eqi(p, "bootloader/patches.ini") || eqi(p, "bootloader/update.bin"))
     return 1;
-  if (eqi(p, "config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin") ||
-      eqi(p, "config/NinMagicGuardian/rescue/libsys_minerva.bso"))
+  /* Format-1 backups from 0.1.0 contain these exact files. Continue accepting
+   * and hashing them when reading; new scans and restores exclude them. */
+  if (owned_rescue(p))
     return 1;
   if ((prefixi(p, "atmosphere/config/") ||
        prefixi(p, "atmosphere/config_templates/") ||
@@ -450,6 +457,10 @@ static int add_entry(operation *o, manifest *m, const char *p) {
   int r;
   if (!gc_managed_path(p, m->info.options))
     return path_error(o, "Archivo fuera del respaldo del sistema", p);
+  /* An environment restore must not roll back Guardian's own repaired rescue
+   * executable or its matched memory module. Keep installation separate. */
+  if (owned_rescue(p))
+    return 0;
   for (i = 0; i < m->info.files; i++)
     if (eqi(m->e[i].path, p))
       return 0;
@@ -852,6 +863,10 @@ static int load(operation *o, const char *dir, manifest *m, int verify) {
   body = digest = NULL;
   if (verify) {
     o->total = m->info.bytes;
+    if (o->preserve_rescue)
+      for (i = 0; i < m->info.files; i++)
+        if (owned_rescue(m->e[i].path))
+          o->total -= m->e[i].size;
     o->done = 0;
     for (i = 0; i < m->info.files; i++) {
       snprintf(p, sizeof p, "%s/data/%s", dir, m->e[i].path);
@@ -860,7 +875,8 @@ static int load(operation *o, const char *dir, manifest *m, int verify) {
         path_error(o, "La copia no coincide con su SHA-256", m->e[i].path);
         goto bad;
       }
-      progress(o, m->e[i].path, m->e[i].size);
+      if (!o->preserve_rescue || !owned_rescue(m->e[i].path))
+        progress(o, m->e[i].path, m->e[i].size);
     }
     m->info.verified = 1;
   }
@@ -1453,18 +1469,67 @@ end:
   free(prior);
   return rc;
 }
+static int protect_rescue_rollback(operation *o, const manifest *m) {
+  static const char *owned[] = {
+      "config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin",
+      "config/NinMagicGuardian/rescue/libsys_minerva.bso"};
+  char path[512];
+  gc_stat live, st;
+  unsigned i, j;
+  for (i = 0; i < sizeof owned / sizeof owned[0]; i++) {
+    int artifacts = 0, r;
+    snprintf(path, sizeof path, RESTORE "/old/%s", owned[i]);
+    r = stat_path(o, path, &st);
+    if (r < 0)
+      return path_error(
+          o, "No se pudo comprobar la copia protegida del rescatador", path);
+    if (r)
+      artifacts = 1;
+    snprintf(path, sizeof path, RESTORE "/new/%s", owned[i]);
+    r = stat_path(o, path, &st);
+    if (r < 0)
+      return path_error(
+          o, "No se pudo comprobar la copia temporal del rescatador", path);
+    if (r)
+      artifacts = 1;
+    for (j = 0; j < m->info.files; j++)
+      if (eqi(m->e[j].path, owned[i])) {
+        snprintf(path, sizeof path, RESTORE "/plans/%04u.txt", j);
+        r = stat_path(o, path, &st);
+        if (r < 0)
+          return path_error(
+              o, "No se pudo comprobar el diario antiguo del rescatador", path);
+        if (r)
+          artifacts = 1;
+        break;
+      }
+    if (!artifacts)
+      continue;
+    r = stat_path(o, owned[i], &live);
+    if (r != 1 || live.type != GC_FILE || !live.size)
+      return path_error(
+          o,
+          "Un diario antiguo aparto un archivo del rescatador Guardian y falta "
+          "su instalacion actual. Se conserva la copia protegida. Reinstala el "
+          "rescatador actualizado antes de continuar",
+          owned[i]);
+  }
+  return 0;
+}
 gc_result gc_restore(gc_context *c) {
   operation o;
   manifest m;
   gc_result r;
   char digest[66], *saved = NULL;
   size_t n;
-  uint64_t available;
+  uint64_t available, restore_bytes = 0;
   unsigned i;
   int pending = 0, ok = 0;
   memset(&m, 0, sizeof m);
-  if (setup(&o, c, 1) || recover_promotion(&o) ||
-      load(&o, CURRENT, &m, 1) != 1) {
+  if (setup(&o, c, 1))
+    goto end;
+  o.preserve_rescue = 1;
+  if (recover_promotion(&o) || load(&o, CURRENT, &m, 1) != 1) {
     if (!o.error[0])
       fail(&o, "No hay un respaldo verificado para restaurar.");
     goto end;
@@ -1477,6 +1542,15 @@ gc_result gc_restore(gc_context *c) {
   pending = exists(&o, RESTORE "/pending.txt", GC_FILE);
   if (pending < 0)
     goto end;
+  for (i = 0; i < m.info.files; i++)
+    if (!owned_rescue(m.e[i].path))
+      restore_bytes += m.e[i].size;
+  if (protect_rescue_rollback(&o, &m)) {
+    /* Even a stale directory with a missing marker must not lose the only
+     * protected copy of a rescue resource during cleanup. */
+    pending = 1;
+    goto end;
+  }
   if (pending) {
     if (read_small(&o, RESTORE "/pending.txt", &saved, &n, 65) || n != 65 ||
         memcmp(saved, digest, 65)) {
@@ -1488,7 +1562,7 @@ gc_result gc_restore(gc_context *c) {
     saved = NULL;
   } else {
     if (o.c->fs.free_space(o.c->fs.user, &available) ||
-        available < m.info.bytes + 4u * 1024 * 1024) {
+        available < restore_bytes + 4u * 1024 * 1024) {
       fail(&o, "No hay espacio para preparar la recuperacion sin perder los "
                "archivos anteriores.");
       goto end;
@@ -1498,13 +1572,13 @@ gc_result gc_restore(gc_context *c) {
       goto end;
     pending = 1;
   }
-  o.total = m.info.bytes;
+  o.total = restore_bytes;
   o.done = 0;
   for (i = 0; i < m.info.files; i++)
-    if (restore_file(&o, &m.e[i], i))
+    if (!owned_rescue(m.e[i].path) && restore_file(&o, &m.e[i], i))
       goto end;
   for (i = 0; i < m.info.files; i++)
-    if (matches(&o, m.e[i].path, &m.e[i]) != 1) {
+    if (!owned_rescue(m.e[i].path) && matches(&o, m.e[i].path, &m.e[i]) != 1) {
       path_error(&o, "Falta verificar un archivo recuperado", m.e[i].path);
       goto end;
     }
@@ -1517,7 +1591,8 @@ gc_result gc_restore(gc_context *c) {
 end:
   r = result(&o, &m, ok, pending && !ok,
              "Sistema de la microSD recuperado y verificado. Los juegos, "
-             "partidas y archivos excluidos se han conservado.");
+             "partidas y archivos excluidos se han conservado. La instalacion "
+             "actual del rescatador Guardian se ha conservado.");
   free(saved);
   manifest_free(&m);
   destroy(&o);

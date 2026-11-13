@@ -68,10 +68,13 @@ los comodines acotados `atmosphere/kips/*` o `atmosphere/kips/*.kip`.
 `atmosphere/secmon.bin`, `warmboot.bin` y `fatal.bin` pueden incorporarse por
 referencia explícita.
 
-Las referencias a payloads conocidos de fusee/Hekate y al rescatador propio
-`config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin` se incluyen. La
-referencia propia también exige y copia su `libsys_minerva.bso` exacto, para
-conservar una pareja compatible de rescatador y módulo de memoria.
+Las referencias a payloads conocidos de fusee/Hekate se incluyen. La referencia
+al rescatador propio
+`config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin` se valida junto con
+su `libsys_minerva.bso` exacto, pero **ninguno de esos dos archivos se copia en
+respaldos nuevos desde 0.1.1**. Su instalación y actualización son independientes
+del respaldo del entorno. Así restaurar un respaldo anterior no reinstala un
+rescatador antiguo que ya se corrigió.
 Otros payloads de herramientas o Linux/Android no obligan a copiar sus sistemas;
 sus entradas INI se conservan. No se siguen rutas arbitrarias de esos sistemas.
 
@@ -168,6 +171,22 @@ No se retiran del sistema archivos ajenos al manifiesto, ni se modifica la base
 de títulos. No debe restaurarse mientras otra aplicación actualice los mismos
 archivos.
 
+Compatibilidad con respaldos 0.1.0: el formato sigue aceptando los dos nombres
+exactos del rescatador propio y verifica los hashes de sus copias antiguas. Al
+restaurar se conservan los archivos actuales de Guardian: ambos nombres se
+saltan en las escrituras, en la comparación de destinos y en el progreso de
+restauración, aunque sus datos archivados siguen comprobándose. Se informa que
+la instalación actual del rescatador se ha conservado.
+
+Si un diario 0.1.0 ya movió uno de esos archivos a `restore/old`, dejó una copia
+en `restore/new` o publicó su plan, y ahora falta su instalación de destino, la
+recuperación se bloquea antes de modificar otros destinos o limpiar temporales.
+Se pide reinstalar el rescatador actualizado y se conserva su copia protegida.
+Una vez reinstalado, se puede continuar sin restaurar el ejecutable antiguo.
+Un archivo actual vacío o especial tampoco se considera una instalación que
+permita desechar esa protección. La comprobación no demuestra por sí sola la
+versión del binario; el instalador debe proporcionar el rescatador actualizado.
+
 ## Pruebas
 
 `tests/run-core-tests.ps1` compila un adaptador host aislado y pruebas reales de
@@ -177,8 +196,31 @@ fallos de escritura, interrupciones de promoción/restauración y rechazo de un
 manifiesto manipulado con su sello recalculado. El adaptador simula una entrada
 especial para no requerir privilegio de enlaces simbólicos de Windows.
 
+La regresión de 0.1.1 construye un respaldo antiguo sintético con los dos
+recursos de Guardian 0.1.0, instala archivos distintos que representan 0.1.1 y
+restaura el entorno conservando esos archivos nuevos. También simula el diario
+antiguo con el rescatador apartado y comprueba que se conserva el rollback
+hasta reinstalar, y que una copia archivada dañada sigue bloqueando la operación.
+No se usan respaldos reales ni CIDs de usuarios como fixtures de pruebas.
+
 Estas pruebas no sustituyen pruebas físicas en V1/V2/Lite/OLED ni demuestran
 durabilidad del hardware frente a desconexiones eléctricas reales.
+
+Para diagnosticar una copia física sin modificarla:
+
+```
+./tests/inspect-backup.ps1 -SdRoot C:/ruta/copia-raiz-SD
+./tests/inspect-backup.ps1 -SdRoot C:/ruta/copia-raiz-SD -RescueFormatter
+```
+
+La raíz indicada debe contener `config/NinMagicGuardian/backup`. El diagnóstico
+imprime presencia, tipo y tamaño de las carpetas/índice/sello/marcadores, el
+mensaje exacto de `gc_inspect`, el CID guardado en el manifiesto y la verificación
+de todos sus datos. La segunda variante usa el formateador del rescatador para
+comprobar lectura cruzada de una copia generada por el NRO. No hay funciones de
+escritura disponibles en su contexto. Un CID guardado se puede leer sin conocer
+el CID actual; comparar el CID físico corresponde después al adaptador. Así no
+se confunde un índice ilegible o inválido con una identidad de tarjeta distinta.
 
 ## Inventario y aislamiento explícito de complementos de arranque
 

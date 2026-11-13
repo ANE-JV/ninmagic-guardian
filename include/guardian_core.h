@@ -69,7 +69,9 @@ gc_result gc_scan_source(gc_context *, unsigned options);
  */
 gc_result gc_create_backup(gc_context *, unsigned options);
 /* Restores only paths named by the verified allowlisted backup. A durable
- * per-file journal makes retry safe. No NAND, games or extras are deleted. */
+ * per-file journal makes retry safe. No NAND, games or extras are deleted.
+ * Guardian's own rescue .bin/Minerva are verified in legacy backups but never
+ * restored, so restoring an old environment cannot undo a rescue update. */
 gc_result gc_restore(gc_context *);
 /* Resume interrupted backup promotion/cleanup, then inspect; does not restore
  * system files. gc_restore itself resumes an interrupted restore. */

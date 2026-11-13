@@ -1,18 +1,23 @@
-# NinMagic Guardian 0.1.0 — beta
+# NinMagic Guardian 0.1.1 — beta
 
 Respaldo selectivo de los archivos de Atmosphère, Hekate y configuración de
 arranque que están en la microSD. Un NRO para usar cuando Atmosphère funciona
 y un rescatador independiente para abrir desde Hekate cuando no funciona.
 
-**Primera beta: compilada y comprobada con pruebas en PC. Todavía necesita
+**Versión beta: compilada y comprobada con pruebas en PC. Todavía necesita
 pruebas físicas en V1, V2, Lite y OLED.** No confundir esta copia de archivos
 con un respaldo de NAND, del firmware de Nintendo o de toda la tarjeta.
 
 ## Instalar el ZIP
 
-Extrae `NinMagic-Guardian-0.1.0.zip` en la raíz de la microSD. El ZIP también
+Extrae `NinMagic-Guardian-0.1.1.zip` en la raíz de la microSD. El ZIP también
 se puede ofrecer en tu servidor de herramientas y extraer con NinMagic AIO.
 No incluye ni reemplaza el pack completo de Atmosphère o Hekate.
+
+**Si instalaste 0.1.0, actualiza el ZIP completo antes de volver a abrir su
+rescatador.** La 0.1.1 corrige un bloqueo del arranque del rescatador y la
+comparación de identidad de algunas microSD. Tu respaldo anterior se conserva
+y sigue siendo verificable; no hace falta borrarlo ni crear uno nuevo.
 
 Abre hbmenu y **NinMagic Guardian**. El icono GUARDIAN utiliza el logo NinMagic
 con azul eléctrico, verde neón y ámbar para distinguirlo de las otras apps.
@@ -30,6 +35,9 @@ con azul eléctrico, verde neón y ámbar para distinguirlo de las otras apps.
 5. Reinicia a Hekate y abre **More configs > NinMagic Guardian - Rescate SD**.
    La primera vez usa únicamente **Comprobar respaldo**. VOL+/VOL- seleccionan
    y POWER confirma. La restauración requiere otra confirmación.
+   Son los botones físicos de volumen y encendido de la consola, no los botones
+   del mando. En resultados, cualquiera de esos tres botones vuelve al menú.
+   El menú incluye **Salir / reiniciar consola** y **Salir / apagar consola**.
 
 Guardian no crea automáticamente una copia nueva de un arranque desconocido.
 Actualiza el respaldo cuando hayas comprobado que el estado nuevo funciona.
@@ -80,6 +88,9 @@ con SHA-256 y la copia debe corresponder a la tarjeta física que está leyendo.
 
 La restauración solo sustituye rutas incluidas en el respaldo. Los archivos
 añadidos después y los plugins externos no se eliminan automáticamente.
+Desde 0.1.1 también se conservan el rescatador Guardian y su recurso Minerva
+actualmente instalados, aunque una copia antigua de 0.1.0 contenga los suyos.
+Así una restauración del sistema no vuelve a instalar el rescatador anterior.
 Un tema, módulo o mod externo que cause el fallo puede requerir desactivarse
 por separado. Los cambios cubiertos por el inventario se revisan desde la
 opción anterior; la app no puede atribuir con certeza un fallo a cualquier archivo.

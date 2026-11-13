@@ -26,7 +26,7 @@ namespace nm {
 namespace {
 constexpr uint64_t MaxNro=16ULL*1024*1024;
 constexpr const char *Target="sdmc:/switch/NinMagicGuardian/NinMagic-Guardian.nro";
-constexpr const char *CurrentVersion="0.1.0";
+constexpr const char *CurrentVersion="0.1.1";
 #ifdef NM_APP_UPDATE_TEST
 std::function<bool(const std::string&,const std::string&)> failRename;
 std::function<bool()> testCommit;

@@ -277,13 +277,180 @@ static void test_sha(void) {
   CHECK(!strcmp(
       h, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
 }
-int main(void) {
+typedef struct {
+  int owned_seen;
+  uint64_t maximum_total;
+} progress_trace;
+static void trace_restore_progress(void *user, const char *path, uint64_t done,
+                                   uint64_t total) {
+  progress_trace *trace = user;
+  (void)done;
+  if (strstr(path, "config/NinMagicGuardian/rescue/"))
+    trace->owned_seen = 1;
+  if (total > trace->maximum_total)
+    trace->maximum_total = total;
+}
+static void test_legacy_rescue_preserved(void) {
+  static const char *paths[] = {
+      "atmosphere/package3", "bootloader/hekate_ipl.ini",
+      "config/NinMagicGuardian/rescue/libsys_minerva.bso",
+      "config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin"};
+  static const char *content[] = {"CORE-SNAPSHOT",
+                                  "[Atmosphere]\nfss0=atmosphere/package3\n",
+                                  "MINERVA-OLD-0.1.0", "RESCUE-OLD-0.1.0"};
+  host h;
+  gc_context c;
+  gc_result r;
+  progress_trace trace = {0, 0};
+  char temp[] = "/tmp/ninmagic-guardian-legacy-test-XXXXXX";
+  char manifest[4096], digest[66], hash[65], path[512];
+  uint64_t bytes = 0;
+  size_t used;
+  unsigned i;
+  memset(&h, 0, sizeof h);
+  CHECK(mkdtemp(temp));
+  snprintf(h.root, sizeof h.root, "%s", temp);
+  h.space = 16ull * 1024 * 1024 * 1024;
+  c = context(&h);
+  fixture(&h);
+  /* Synthetic old format-1 backup: old Guardian included its own resources.
+   * Never use or mutate the private backup copied from the physical console. */
+  for (i = 0; i < 4; i++) {
+    snprintf(path, sizeof path, CUR "/data/%s", paths[i]);
+    put(&h, path, content[i]);
+    bytes += strlen(content[i]);
+  }
+  used = (size_t)snprintf(
+      manifest, sizeof manifest,
+      "NMGUARDIAN1\nidentity=%s\nfirmware=test-fw\nmodel=host-SD\ncreated="
+      "legacy-fixture\noptions=0\ncount=4\nbytes=%llu\n",
+      c.identity, (unsigned long long)bytes);
+  for (i = 0; i < 4; i++) {
+    hashhex(content[i], strlen(content[i]), hash);
+    used += (size_t)snprintf(
+        manifest + used, sizeof manifest - used, "F|%llu|%s|%s\n",
+        (unsigned long long)strlen(content[i]), hash, paths[i]);
+  }
+  CHECK(used < sizeof manifest);
+  put(&h, CUR "/manifest.txt", manifest);
+  hashhex(manifest, used, digest);
+  digest[64] = '\n';
+  digest[65] = 0;
+  put(&h, CUR "/complete.sha256", digest);
+  must_ok(gc_inspect(&c, 1));
+  put(&h, paths[0], "DAMAGED-CORE");
+  put(&h, paths[1], "DAMAGED-INI");
+  put(&h, paths[2], "MINERVA-FIXED-0.1.1");
+  put(&h, paths[3], "RESCUE-FIXED-0.1.1");
+  c.progress = trace_restore_progress;
+  c.progress_user = &trace;
+  r = gc_restore(&c);
+  must_ok(r);
+  CHECK(strstr(r.message, "rescatador Guardian"));
+  CHECK(!trace.owned_seen &&
+        trace.maximum_total == strlen(content[0]) + strlen(content[1]));
+  same(&h, paths[0], content[0]);
+  same(&h, paths[1], content[1]);
+  same(&h, paths[2], "MINERVA-FIXED-0.1.1");
+  same(&h, paths[3], "RESCUE-FIXED-0.1.1");
+  same(&h,
+       CUR "/data/config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin",
+       content[3]);
+  /* A 0.1.0 journal may already have moved the live rescue out of the way.
+   * Preserve that rollback rather than cleaning it while its destination lacks
+   * a repaired installation. Reinstallation then makes continuation safe. */
+  put(&h, WORK "/pending.txt", digest);
+  dirs(&h,
+       WORK "/old/config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin");
+  CHECK(!hn(
+      &h, paths[3],
+      WORK "/old/config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin"));
+  put(&h, paths[0], "DAMAGED-AGAIN");
+  r = gc_restore(&c);
+  CHECK(!r.ok && r.recovery_required && strstr(r.message, "Reinstala"));
+  CHECK(!present(&h, paths[3]));
+  same(&h, paths[0], "DAMAGED-AGAIN");
+  same(&h,
+       WORK "/old/config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin",
+       "RESCUE-FIXED-0.1.1");
+  CHECK(present(&h, WORK "/pending.txt"));
+  put(&h, paths[3], "RESCUE-FIXED-REINSTALLED");
+  must_ok(gc_restore(&c));
+  same(&h, paths[0], content[0]);
+  same(&h, paths[3], "RESCUE-FIXED-REINSTALLED");
+  CHECK(!present(&h, WORK));
+  /* Legacy resources remain integrity checked even though not restored. */
+  put(&h, CUR "/data/config/NinMagicGuardian/rescue/libsys_minerva.bso",
+      "CORRUPT");
+  r = gc_restore(&c);
+  CHECK(!r.ok);
+  same(&h, paths[2], "MINERVA-FIXED-0.1.1");
+}
+static void *readonly_open(void *v, const char *p, char mode) {
+  return mode == 'r' ? ho(v, p, mode) : NULL;
+}
+static int inspect_root(const char *root) {
+  static const char *paths[] = {GC_BACKUP_ROOT "/current",
+                                GC_BACKUP_ROOT "/current/manifest.txt",
+                                GC_BACKUP_ROOT "/current/complete.sha256",
+                                GC_BACKUP_ROOT "/promotion.pending",
+                                GC_BACKUP_ROOT "/previous",
+                                GC_BACKUP_ROOT "/staging"};
+  host h;
+  gc_context c;
+  gc_result r;
+  unsigned i;
+  memset(&h, 0, sizeof h);
+  if (!root || !*root || strlen(root) >= sizeof h.root) {
+    fprintf(stderr, "Invalid local SD-root path\n");
+    return 2;
+  }
+  snprintf(h.root, sizeof h.root, "%s", root);
+  c = context(&h);
+  /* The diagnostic cannot create, rename, delete or sync files, even if a
+   * future inspection accidentally attempted a write operation. */
+  c.identity[0] = 0;
+  c.fs.open = readonly_open;
+  c.fs.write = NULL;
+  c.fs.file_sync = NULL;
+  c.fs.mkdir = NULL;
+  c.fs.rename = NULL;
+  c.fs.remove = NULL;
+  c.fs.sync = NULL;
+  c.fs.free_space = NULL;
+  c.fs.checkpoint = NULL;
+  printf("Read-only backup inspection, SD-root=%s\n", root);
+  for (i = 0; i < sizeof paths / sizeof paths[0]; i++) {
+    gc_stat s;
+    int found = hs(&h, paths[i], &s);
+    printf("stat=%d type=%d bytes=%llu path=%s\n", found,
+           found == 1 ? (int)s.type : 0,
+           found == 1 ? (unsigned long long)s.size : 0, paths[i]);
+  }
+  r = gc_inspect(&c, 0);
+  printf("Metadata: ok=%d present=%d files=%u bytes=%llu CID=%s\n%s\n", r.ok,
+         r.info.present, r.info.files, (unsigned long long)r.info.bytes,
+         r.info.identity, r.message);
+  if (!r.ok || !r.info.present)
+    return 3;
+  r = gc_inspect(&c, 1);
+  printf("Payload verification: ok=%d verified=%d\n%s\n", r.ok, r.info.verified,
+         r.message);
+  return r.ok && r.info.verified ? 0 : 4;
+}
+int main(int argc, char **argv) {
   host h;
   gc_context c;
   gc_result r;
   char temp[] = "/tmp/ninmagic-guardian-test-XXXXXX", path[1024], digest[66],
        *body, *original;
   size_t pos;
+  if (argc == 3 && !strcmp(argv[1], "--inspect-root"))
+    return inspect_root(argv[2]);
+  if (argc != 1) {
+    fprintf(stderr, "Usage: core_test [--inspect-root SD_ROOT]\n");
+    return 2;
+  }
   memset(&h, 0, sizeof h);
   CHECK(mkdtemp(temp));
   snprintf(h.root, sizeof h.root, "%s", temp);
@@ -291,17 +458,23 @@ int main(void) {
   c = context(&h);
   test_paths();
   test_sha();
+  test_legacy_rescue_preserved();
   fixture(&h);
   /* Source estimate is read-only and leaves optional/excluded data untouched.
    */
   r = gc_scan_source(&c, 0);
   must_ok(r);
-  CHECK(r.info.files == 14);
+  CHECK(r.info.files == 12);
   CHECK(!present(&h, GC_BACKUP_ROOT));
   must_ok(gc_create_backup(&c, 0));
   r = gc_inspect(&c, 1);
   must_ok(r);
-  CHECK(r.info.present && r.info.verified && r.info.files == 14);
+  CHECK(r.info.present && r.info.verified && r.info.files == 12);
+  CHECK(!present(
+      &h,
+      CUR "/data/config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin"));
+  CHECK(!present(&h, CUR
+                 "/data/config/NinMagicGuardian/rescue/libsys_minerva.bso"));
   CHECK(!present(&h, CUR "/data/Nintendo"));
   CHECK(!present(&h, CUR "/data/atmosphere/contents"));
   CHECK(!present(&h, CUR "/data/bootloader/payloads/spare.bin"));
