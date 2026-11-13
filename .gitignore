@@ -1,0 +1,11 @@
+build/
+dist/
+*.nro
+*.elf
+*.nacp
+*.map
+*.o
+*.exe
+__pycache__/
+private/
+inspection*/
