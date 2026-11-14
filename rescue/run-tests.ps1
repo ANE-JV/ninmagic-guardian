@@ -8,6 +8,12 @@ Push-Location -LiteralPath $guardianRoot
 try {
     & python rescue/check_entry.py
     if ($LASTEXITCODE -ne 0) { throw 'La entrada de rescate contiene un cambio de pila inseguro.' }
+    & python rescue/check_ui_calls.py
+    if ($LASTEXITCODE -ne 0) { throw 'La pantalla de rescate utiliza un formateador incompatible.' }
+    & $guardianCompiler -std=c99 -Wall -Wextra -Werror -O2 -Iinclude rescue/guardian_format.c rescue/guardian_ui_text.c rescue/test_ui_text.c -o (Join-Path $guardianTemp 'guardian-ui-text-test.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la prueba real de texto de pantalla.' }
+    & (Join-Path $guardianTemp 'guardian-ui-text-test.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'La pantalla no muestra bien tamaño, fecha o contadores.' }
     & $guardianCompiler -std=c99 -Wall -Wextra -Werror -O2 rescue/guardian_cid.c rescue/test_cid.c -o (Join-Path $guardianTemp 'guardian-cid-test.exe')
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la prueba de identidad SD.' }
     & (Join-Path $guardianTemp 'guardian-cid-test.exe')

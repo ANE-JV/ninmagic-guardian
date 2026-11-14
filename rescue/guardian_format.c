@@ -6,10 +6,11 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <limits.h>
+#include "guardian_format.h"
 typedef struct { char *b; size_t cap,n; } outbuf;
 static void put(outbuf *o,char c) { if (o->cap && o->n<o->cap-1) o->b[o->n]=c; o->n++; }
-int guardian_snprintf(char *buffer,size_t cap,const char *fmt,...) {
-    outbuf o={buffer,cap,0}; va_list ap; va_start(ap,fmt);
+int guardian_vsnprintf(char *buffer,size_t cap,const char *fmt,va_list args) {
+    outbuf o={buffer,cap,0}; va_list ap; va_copy(ap,args);
     while (*fmt) {
         if (*fmt!='%') { put(&o,*fmt++); continue; }
         fmt++;
@@ -41,4 +42,9 @@ int guardian_snprintf(char *buffer,size_t cap,const char *fmt,...) {
     }
     va_end(ap); if (cap) buffer[o.n<cap?o.n:cap-1]=0;
     return o.n>INT_MAX?-1:(int)o.n;
+}
+int guardian_snprintf(char *buffer,size_t cap,const char *fmt,...) {
+    va_list ap; va_start(ap,fmt);
+    int result=guardian_vsnprintf(buffer,cap,fmt,ap);
+    va_end(ap); return result;
 }

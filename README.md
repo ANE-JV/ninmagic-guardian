@@ -1,4 +1,4 @@
-# NinMagic Guardian 0.1.1 — beta
+# NinMagic Guardian 0.1.3 — beta
 
 Respaldo selectivo de los archivos de Atmosphère, Hekate y configuración de
 arranque que están en la microSD. Un NRO para usar cuando Atmosphère funciona
@@ -10,7 +10,7 @@ con un respaldo de NAND, del firmware de Nintendo o de toda la tarjeta.
 
 ## Instalar el ZIP
 
-Extrae `NinMagic-Guardian-0.1.1.zip` en la raíz de la microSD. El ZIP también
+Extrae `NinMagic-Guardian-0.1.3.zip` en la raíz de la microSD. El ZIP también
 se puede ofrecer en tu servidor de herramientas y extraer con NinMagic AIO.
 No incluye ni reemplaza el pack completo de Atmosphère o Hekate.
 
@@ -18,6 +18,11 @@ No incluye ni reemplaza el pack completo de Atmosphère o Hekate.
 rescatador.** La 0.1.1 corrige un bloqueo del arranque del rescatador y la
 comparación de identidad de algunas microSD. Tu respaldo anterior se conserva
 y sigue siendo verificable; no hace falta borrarlo ni crear uno nuevo.
+
+La 0.1.3 corrige la pantalla del rescatador que mostraba «%u» en vez del
+número de archivos y el tamaño, y podía dejar la fecha vacía. También ajusta
+las líneas largas al área de pantalla. Requiere el ZIP completo para actualizar
+el rescatador; conserva el respaldo existente.
 
 Abre hbmenu y **NinMagic Guardian**. El icono GUARDIAN utiliza el logo NinMagic
 con azul eléctrico, verde neón y ámbar para distinguirlo de las otras apps.

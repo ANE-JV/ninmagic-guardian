@@ -57,6 +57,13 @@ entre 0x40031000 y 0x4003F000, separado del payload, parametros DRAM y pilas de
 interrupciones. `check_entry.py` valida tanto la fuente como el ELF enlazado;
 la compilacion genera el informe de GCC `stack-usage.json`.
 
+Desde 0.1.3 todo el texto propio, tanto literal como formateado, pasa por un
+destino que ajusta las lineas al ancho y recorta la altura antes de emitir cada
+glifo. Comprueba tambien el paso de linea del framebuffer y los tamanos reales
+de fuente 8/16. El cuerpo no invade el pie; el pie y el progreso tienen areas
+explicitas. No se envia ningun salto de linea a `gfx_putc`, que volveria arriba
+al superar el borde inferior. Las pruebas cubren superficies 720x1280 y canarios.
+
 El rescate no conoce el firmware instalado en NAND. Antes de confirmar muestra
 el firmware anotado en la copia: restaurar un Atmosphere antiguo tras actualizar
 el firmware puede no arrancar. Confirme solo si la copia sigue siendo compatible.

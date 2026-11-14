@@ -10,6 +10,7 @@
 #include "guardian_core.h"
 #include "guardian_addons.h"
 #include "guardian_fatfs.h"
+#include "guardian_ui_text.h"
 
 hekate_config h_cfg;
 boot_cfg_t __attribute__((section ("._boot_cfg"))) b_cfg;
@@ -39,15 +40,16 @@ static void maintain_memory(void) {
 }
 
 static void header(const char *title) {
+    guardian_ui_clip(0,0,720,1120);
     gfx_clear_color(BG); gfx_con.fntsz=16;
     gfx_con_setcol(BLUE,1,BG); gfx_con_setpos(24,30);
-    gfx_puts("NINMAGIC GUARDIAN\n\n");
-    gfx_con_setcol(NEON_GREEN,1,BG); gfx_printf("  RESCATE SD - 0.1.1\n\n");
-    gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); gfx_printf("  %s\n\n",title);
-    gfx_printf("  %s | Solo archivos de la microSD\n",ctx.model);
-    gfx_puts("  Sin acceso a NAND / emuMMC\n\n");
+    guardian_ui_puts("NINMAGIC GUARDIAN\n\n");
+    gfx_con_setcol(NEON_GREEN,1,BG); guardian_ui_printf("  RESCATE SD - 0.1.3\n\n");
+    gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); guardian_ui_printf("  %s\n\n",title);
+    guardian_ui_printf("  %s | Solo archivos de la microSD\n",ctx.model);
+    guardian_ui_puts("  Sin acceso a NAND / emuMMC\n\n");
     gfx_con_setcol(AMBER,1,BG);
-    gfx_puts("  PRUEBA PREVIA: hardware aun no validado\n\n");
+    guardian_ui_puts("  PRUEBA PREVIA: hardware aun no validado\n\n");
     gfx_con_setcol(TXT_CLR_DEFAULT,1,BG);
 }
 static u32 wait_buttons(void) {
@@ -59,23 +61,25 @@ static u32 wait_buttons(void) {
     }
 }
 static void wait_key(void) {
+    guardian_ui_clip(0,1144,720,1264);
     gfx_con_setcol(NEON_GREEN,1,BG); gfx_con_setpos(24,1160);
-    gfx_puts("VOL +/- o POWER: volver al menu\nSalir / reiniciar esta en el menu.");
+    guardian_ui_puts("VOL +/- o POWER: volver al menu\nSalir / reiniciar esta en el menu.");
     (void)wait_buttons();
+    guardian_ui_clip(0,0,720,1120);
 }
 static int confirm(const char *title,const char *message,int firmware_warning) {
     int yes=0;
     for (;;) {
-        header(title); gfx_printf("  %s\n\n",message);
-        gfx_puts("  Juegos y partidas se conservan.\n  Solo se aplica la operacion indicada.\n\n");
+        header(title); guardian_ui_printf("  %s\n\n",message);
+        guardian_ui_puts("  Juegos y partidas se conservan.\n  Solo se aplica la operacion indicada.\n\n");
         if (firmware_warning) {
             gfx_con_setcol(AMBER,1,BG);
-            gfx_printf("  Firmware de la copia: %s\n",backup_firmware);
-            gfx_puts("  Este rescate no lee el firmware actual.\n  Confirma solo si sigue siendo compatible.\n\n");
+            guardian_ui_printf("  Firmware de la copia: %s\n",backup_firmware);
+            guardian_ui_puts("  Este rescate no lee el firmware actual.\n  Confirma solo si sigue siendo compatible.\n\n");
         }
         gfx_con_setcol(TXT_CLR_DEFAULT,1,BG);
-        gfx_printf("  %s Cancelar\n\n  %s Confirmar\n\n",yes?" ":">",yes?">":" ");
-        gfx_puts("  VOL: cambiar | POWER: elegir\n");
+        guardian_ui_printf("  %s Cancelar\n\n  %s Confirmar\n\n",yes?" ":">",yes?">":" ");
+        guardian_ui_puts("  VOL: cambiar | POWER: elegir\n");
         u32 b=wait_buttons(); if (b&(BTN_VOL_UP|BTN_VOL_DOWN)) yes=!yes;
         if (b&BTN_POWER) return yes;
     }
@@ -84,23 +88,22 @@ static void progress(void *u,const char *path,uint64_t done,uint64_t total) {
     u32 now=get_tmr_ms(); (void)u;
     if (now-last_progress<100 && done!=total) return;
     last_progress=now;
+    guardian_ui_clip(0,400,720,900);
     gfx_clear_partial_grey(0x11,400,500);
     gfx_con_setpos(24,410); gfx_con_setcol(BLUE,1,BG);
-    gfx_printf("Trabajando: %u %%\n\n",total?(u32)(done*100/total):0);
-    gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); gfx_puts(path);
-    gfx_puts("\n\nNo apagues ni retires la microSD.\n");
+    guardian_ui_printf("Trabajando: %u %%\n\n",total?(u32)(done*100/total):0);
+    gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); guardian_ui_puts(path);
+    guardian_ui_puts("\n\nNo apagues ni retires la microSD.\n");
+    guardian_ui_clip(0,0,720,1120);
     maintain_memory();
 }
 static void show_result(gc_result r) {
     header(r.ok?"Operacion completada":"Revisa el resultado");
     gfx_con_setcol(r.ok?BLUE:AMBER,1,BG);
-    gfx_printf("  %s\n",r.message);
-    if (r.info.present) {
-        u32 tenths=(u32)((r.info.bytes*10U+524288U)/1048576U);
-        gfx_printf("\n  Archivos: %u\n  Respaldo: %u.%u MiB\n  Creado: %s\n",r.info.files,tenths/10,tenths%10,r.info.created);
-    }
-    if (r.recovery_required) gfx_puts("\n  Conserva el respaldo. Reintenta recuperar.\n");
-    if (r.info.present) gfx_printf("\n  Firmware de la copia: %s\n",r.info.firmware);
+    guardian_ui_printf("  %s\n",r.message);
+    guardian_ui_backup_summary(&r.info);
+    if (r.recovery_required) guardian_ui_puts("\n  Conserva el respaldo. Reintenta recuperar.\n");
+    if (r.info.present) guardian_ui_printf("\n  Firmware de la copia: %s\n",r.info.firmware);
     wait_key();
 }
 static int matching_backup(void) {
@@ -109,23 +112,23 @@ static int matching_backup(void) {
     if (!r.ok) {
         const guardian_fs_error *fs=guardian_fatfs_last_error();
         header("No se pudo leer el respaldo");
-        gfx_printf("  %s\n\n",r.message);
-        if (fs->code) gfx_printf("  FatFs: %d / %s\n  %s\n",fs->code,fs->operation,fs->path);
-        gfx_puts("\n  No significa que la copia no exista.\n  No se ha restaurado ni borrado nada.\n");
+        guardian_ui_printf("  %s\n\n",r.message);
+        if (fs->code) guardian_ui_printf("  FatFs: %d / %s\n  %s\n",fs->code,fs->operation,fs->path);
+        guardian_ui_puts("\n  No significa que la copia no exista.\n  No se ha restaurado ni borrado nada.\n");
         wait_key(); return 0;
     }
     if (!r.info.present) {
         header("No se encontro una copia en esta ruta");
-        gfx_puts("  config/NinMagicGuardian/backup/current\n\n");
-        gfx_printf("  %s\n\n",r.message);
-        gfx_puts("  Vuelve al NRO para comprobar la ubicacion.\n  No se ha modificado ningun archivo.\n");
+        guardian_ui_puts("  config/NinMagicGuardian/backup/current\n\n");
+        guardian_ui_printf("  %s\n\n",r.message);
+        guardian_ui_puts("  Vuelve al NRO para comprobar la ubicacion.\n  No se ha modificado ningun archivo.\n");
         wait_key(); return 0;
     }
     if (!guardian_match_sd_identity(&ctx,r.info.identity)) {
         char raw[33],sdk[33]; guardian_sd_cids(raw,sdk);
         header("Respaldo encontrado: identidad diferente");
-        gfx_printf("  CID del respaldo:\n  %s\n\n  CID de la SD, formato SDK:\n  %s\n\n  Registro fisico Hekate:\n  %s\n",r.info.identity,sdk,raw);
-        gfx_puts("\n  La restauracion sigue bloqueada.\n  Fotografia este diagnostico para revisarlo.\n");
+        guardian_ui_printf("  CID del respaldo:\n  %s\n\n  CID de la SD, formato SDK:\n  %s\n\n  Registro fisico Hekate:\n  %s\n",r.info.identity,sdk,raw);
+        guardian_ui_puts("\n  La restauracion sigue bloqueada.\n  Fotografia este diagnostico para revisarlo.\n");
         wait_key(); return 0;
     }
     memcpy(backup_firmware,r.info.firmware,sizeof(backup_firmware));
@@ -134,18 +137,18 @@ static int matching_backup(void) {
 }
 static int can_write(void) {
     int soc=0;
-    if (!minerva_ready) { header("Falta recurso de memoria"); gfx_puts("  Copia de nuevo la carpeta de rescate.\n  Restauracion deshabilitada.\n"); wait_key(); return 0; }
+    if (!minerva_ready) { header("Falta recurso de memoria"); guardian_ui_puts("  Copia de nuevo la carpeta de rescate.\n  Restauracion deshabilitada.\n"); wait_key(); return 0; }
     if (max17050_get_property(MAX17050_RepSOC,&soc) || (soc>>8)<20) {
         header("Carga la bateria antes de recuperar");
-        gfx_puts("  Se necesita al menos un 20 % de bateria.\n"); wait_key(); return 0;
+        guardian_ui_puts("  Se necesita al menos un 20 % de bateria.\n"); wait_key(); return 0;
     }
     return matching_backup();
 }
 static void show_addon_result(ga_result r) {
     header(r.ok?"Operacion de extras completada":"Revisa los extras");
     gfx_con_setcol(r.ok?BLUE:AMBER,1,BG);
-    gfx_printf("  %s\n\n  Elementos cambiados: %u\n",r.message,r.changed);
-    if (r.recovery_required) gfx_puts("\n  Hay una operacion confirmada pendiente.\n  Puedes reanudarla desde esta opcion.\n");
+    guardian_ui_printf("  %s\n\n  Elementos cambiados: %u\n",r.message,r.changed);
+    if (r.recovery_required) guardian_ui_puts("\n  Hay una operacion confirmada pendiente.\n  Puedes reanudarla desde esta opcion.\n");
     wait_key();
 }
 static void restore_system(void) {
@@ -171,7 +174,7 @@ static void review_addons(void) {
     header("Comparando modulos y tema de HOME");
     addon_review=ga_inspect(&ctx);
     if (!addon_review.quarantine_pending && (!addon_review.ok || !addon_review.count)) {
-        header("Revision de extras"); gfx_printf("  %s\n",addon_review.message); wait_key(); return;
+        header("Revision de extras"); guardian_ui_printf("  %s\n",addon_review.message); wait_key(); return;
     }
     if (addon_review.quarantine_pending) {
         if (can_write() && confirm("Continuar aislamiento pendiente","Continua el plan ya confirmado.",0)) {
@@ -187,18 +190,18 @@ static void review_addons(void) {
         for (unsigned i=0;i<addon_review.count;i++) marked+=addon_marks[i]!=0;
         header("Elige extras que quieres apartar");
         gfx_con_setcol(AMBER,1,BG);
-        gfx_puts("  Son nuevos o cambiados desde la copia.\n  No prueba que sean la causa del fallo.\n\n");
+        guardian_ui_puts("  Son nuevos o cambiados desde la copia.\n  No prueba que sean la causa del fallo.\n\n");
         gfx_con_setcol(TXT_CLR_DEFAULT,1,BG);
-        gfx_printf("  %u elegidos. Se pueden reactivar despues.\n\n",marked);
+        guardian_ui_printf("  %u elegidos. Se pueden reactivar despues.\n\n",marked);
         for (unsigned i=start;i<end;i++) {
             gfx_con_setcol(i==selected?NEON_GREEN:TXT_CLR_DEFAULT,1,BG);
             if (i<addon_review.count) {
                 ga_candidate *c=&addon_review.candidates[i];
-                gfx_printf("  %s [%s] %s\n    %s | %s\n\n",i==selected?">":" ",addon_marks[i]?"X":" ",c->title_id,
+                guardian_ui_printf("  %s [%s] %s\n    %s | %s\n\n",i==selected?">":" ",addon_marks[i]?"X":" ",c->title_id,
                     c->kind==GA_HOME_THEME?"Tema HOME":"Modulo de arranque",c->newly_added?"Nuevo":"Cambiado");
-            } else gfx_printf("  %s %s\n\n",i==selected?">":" ",i==addon_review.count?"Continuar con lo elegido":"Cancelar");
+            } else guardian_ui_printf("  %s %s\n\n",i==selected?">":" ",i==addon_review.count?"Continuar con lo elegido":"Cancelar");
         }
-        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); gfx_puts("\n  VOL: mover | POWER: marcar / elegir\n");
+        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); guardian_ui_puts("\n  VOL: mover | POWER: marcar / elegir\n");
         u32 b=wait_buttons(); unsigned count=addon_review.count+2;
         if (b&BTN_VOL_UP) selected=(selected+count-1)%count;
         if (b&BTN_VOL_DOWN) selected=(selected+1)%count;
@@ -230,9 +233,9 @@ void guardian_main(void) {
     const char *menu[]={"Verificar respaldo (solo lectura)","Restaurar respaldo / continuar rescate","Revisar modulos nuevos y tema HOME","Reactivar extras apartados","Recuperar respaldo interrumpido","Salir / reiniciar consola","Salir / apagar consola"};
     for (;;) {
         header("Recupera Atmosphere y el arranque");
-        if (!sd_ready) gfx_puts("  No se pudo montar la SD. Apaga y revisala.\n\n");
-        for (int i=0;i<7;i++) { gfx_con_setcol(i==selected?NEON_GREEN:TXT_CLR_DEFAULT,1,BG); gfx_printf("  %s %s\n\n",i==selected?">":" ",menu[i]); }
-        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); gfx_puts("\n  VOL +/-: mover | POWER: elegir\n");
+        if (!sd_ready) guardian_ui_puts("  No se pudo montar la SD. Apaga y revisala.\n\n");
+        for (int i=0;i<7;i++) { gfx_con_setcol(i==selected?NEON_GREEN:TXT_CLR_DEFAULT,1,BG); guardian_ui_printf("  %s %s\n\n",i==selected?">":" ",menu[i]); }
+        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); guardian_ui_puts("\n  VOL +/-: mover | POWER: elegir\n");
         u32 b=wait_buttons();
         if (b&BTN_VOL_UP) selected=(selected+6)%7;
         if (b&BTN_VOL_DOWN) selected=(selected+1)%7;

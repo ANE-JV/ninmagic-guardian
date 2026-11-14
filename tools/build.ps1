@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$DevkitPro = 'C:\devkitPro',
-    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$ExpectedVersion='0.1.1'
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$ExpectedVersion='0.1.3'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

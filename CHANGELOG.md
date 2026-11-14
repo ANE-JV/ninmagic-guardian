@@ -1,5 +1,18 @@
 # Cambios
 
+## 0.1.3 — Datos del respaldo en el rescatador
+
+- Corrige la presentación del número de archivos, tamaño y fecha del respaldo
+  en el rescatador. La verificación ya terminaba, pero los números aparecían
+  como «%u» y podían desplazar el texto de la fecha.
+- Unifica el formato de texto de las pantallas del rescatador y comprueba
+  los mensajes con sus argumentos completos.
+- Ajusta y limita las líneas de texto al área de pantalla disponible.
+- Conserva el respaldo existente y las correcciones de arranque de 0.1.1.
+
+Instala el ZIP completo para actualizar también el rescatador de Hekate.
+Actualizar solo el NRO no sustituye el rescatador.
+
 ## 0.1.1 — Corrección del rescatador
 
 - Corrige el arranque del rescatador que podía bloquearse y dejar de responder

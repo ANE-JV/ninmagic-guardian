@@ -5,7 +5,7 @@
 
 namespace {unsigned checks=0;void check(bool value){++checks;if(!value)throw std::runtime_error("update HTTPS policy check");}}
 int main(){try{
-    for(const std::string url:{"https://raw.githubusercontent.com/ANE-JV/ninmagic-guardian/main/update.txt","https://example.test:443/versions/v0.1.1/NinMagic-Guardian.nro"})check(nm::safeUrl(url));
+    for(const std::string url:{"https://raw.githubusercontent.com/ANE-JV/ninmagic-guardian/main/update.txt","https://example.test:443/versions/v0.1.3/NinMagic-Guardian.nro"})check(nm::safeUrl(url));
     for(const std::string url:{"http://example.test/update.txt","https://u:p@example.test/update.txt","https:///update.txt","https://example.test/a#fragment","https://example.test/a b","https://example.test/a\nb","https://example.test/a\\b"})check(!nm::safeUrl(url));
     check(!nm::safeUrl(std::string(2049,'a')));
     check(nm::bodyLimit("sdmc:/config/NinMagicCleaner/app-update/manifest.pending")==0);

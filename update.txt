@@ -1,5 +1,5 @@
 NINMAGIC-GUARDIAN-UPDATE-1
-version=0.1.1
-url=https://raw.githubusercontent.com/ANE-JV/ninmagic-guardian/main/versions/v0.1.1/NinMagic-Guardian.nro
-sha256=25fdc6cd8a77842eee1e9701bef4e14df4c60ce255a621566b04dc93c914b9e9
-size=2156402
+version=0.1.3
+url=https://raw.githubusercontent.com/ANE-JV/ninmagic-guardian/main/versions/v0.1.3/NinMagic-Guardian.nro
+sha256=e9005d7c5f9ef1fcd98809d66c60bfb79307ca2520c6774ef95a38581136afa2
+size=2157106

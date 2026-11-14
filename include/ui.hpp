@@ -6,7 +6,7 @@
 #include "guardian_core.h"
 #include "guardian_addons.h"
 namespace nmguardian {
-inline constexpr char AppVersion[]="0.1.1";
+inline constexpr char AppVersion[]="0.1.3";
 inline constexpr char AppPath[]="sdmc:/switch/NinMagicGuardian/NinMagic-Guardian.nro";
 enum class Screen {Home,Options,BackupConfirm,RestoreConfirm,RescueConfirm,AddonReview,QuarantineConfirm,ReactivateConfirm,Help,Update,ConfirmUpdate,ConfirmArchive,Busy,Result};
 struct View {
