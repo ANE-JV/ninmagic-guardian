@@ -6,15 +6,15 @@
 #include "guardian_core.h"
 #include "guardian_addons.h"
 namespace nmguardian {
-inline constexpr char AppVersion[]="0.1.3";
+inline constexpr char AppVersion[]="0.2.0";
 inline constexpr char AppPath[]="sdmc:/switch/NinMagicGuardian/NinMagic-Guardian.nro";
-enum class Screen {Home,Options,BackupConfirm,RestoreConfirm,RescueConfirm,AddonReview,QuarantineConfirm,ReactivateConfirm,Help,Update,ConfirmUpdate,ConfirmArchive,Busy,Result};
+enum class Screen {Home,Options,BackupConfirm,RestoreConfirm,RestoreChanges,DiscardConfirm,RescueConfirm,AddonReview,QuarantineConfirm,ReactivateConfirm,Help,Update,ConfirmUpdate,ConfirmArchive,Busy,Result};
 struct View {
     Screen screen=Screen::Home;
     size_t selected=0;
     std::string firmware,model,environmentDetail,message,operation,progressPath,updateError,recoveryError;
     bool atmosphere=false,identityValid=false,appletMode=false,success=false,queryComplete=false,restartRequired=false;
-    bool sourceReady=false;
+    bool sourceReady=false,restoreAddons=false,restorePermanent=false,discardWithRestore=true;
     unsigned options=0;
     gc_backup_info backup{},source{};
     ga_review addons{};

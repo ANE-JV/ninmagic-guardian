@@ -5,13 +5,18 @@
 param(
     [switch]$Install,
     [switch]$Signature,
+    [switch]$NroOnly,
     [switch]$WhatIf,
-    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$ExpectedVersion = '0.1.3',
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$ExpectedVersion = '0.2.0',
     [ValidateRange(5,30)][int]$TimeoutSeconds = 30
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($Install -and $Signature) { throw 'Elige instalación o firma de solo lectura; no ambas.' }
+function Assert-TransferMode([bool]$DoInstall,[bool]$DoSignature,[bool]$OnlyNro) {
+    if ($DoInstall -and $DoSignature) { throw 'Elige instalación o firma de solo lectura; no ambas.' }
+    if ($OnlyNro -and -not $DoInstall) { throw '-NroOnly requiere -Install y nunca se usa para la firma.' }
+}
+Assert-TransferMode ([bool]$Install) ([bool]$Signature) ([bool]$NroOnly)
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $channel = 'https://raw.githubusercontent.com/ANE-JV/ninmagic-guardian/main/update.txt'
 $validationPath = Join-Path $projectRoot 'dist/validation.json'
@@ -50,6 +55,16 @@ function Get-BytesSha([byte[]]$Bytes) {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant() }
     finally { $sha.Dispose() }
+}
+function Select-TransferPayload([object[]]$Items,[bool]$OnlyNro) {
+    # Selection never weakens full-package validation: even NRO-only transfers
+    # require the exact complete 14-file distribution as their source.
+    if ($Items.Count -ne $allowedFiles.Count) { throw 'El paquete de origen debe contener los 14 archivos autorizados.' }
+    foreach ($required in $allowedFiles) {
+        if (@($Items | Where-Object Relative -CEQ $required).Count -ne 1) { throw 'El paquete de origen no coincide con la lista autorizada.' }
+    }
+    if ($OnlyNro) { return @($Items | Where-Object Relative -CEQ 'switch/NinMagicGuardian/NinMagic-Guardian.nro') }
+    return $Items
 }
 
 # Validate the exact packaged build before connecting to the MTP namespace.
@@ -96,6 +111,7 @@ $packagedChannel = @($payload | Where-Object Relative -CEQ 'config/NinMagicGuard
 if ([Text.Encoding]::ASCII.GetString($packagedChannel.Bytes) -cne ($channel + "`n")) {
     throw 'El canal del ZIP no coincide exactamente con el canal verificado.'
 }
+$transferPayload = @(Select-TransferPayload $payload.ToArray() ([bool]$NroOnly))
 
 $shell = New-Object -ComObject Shell.Application
 $computer = $shell.NameSpace(17)
@@ -191,13 +207,13 @@ function Wait-Leaf($Parent,[string]$Name,[long]$Size) {
 # inventory, quarantine, Atmosphere, games, NAND or another application's folder.
 # The default preview creates no local files and makes no SD writes.
 $preview = [Collections.Generic.List[object]]::new()
-foreach ($item in $payload) {
+foreach ($item in $transferPayload) {
     $parent = Resolve-Parent $item.Relative
     $remote = if ($null -ne $parent) { Find-Leaf $parent ([IO.Path]::GetFileName($item.Relative)) } else { $null }
     $preview.Add([pscustomobject]@{Destination=('sdmc:/'+$item.Relative);Exists=($null -ne $remote);Bytes=$item.Size;Sha256=$item.Sha256})
 }
 if ((-not $Install -or $WhatIf) -and -not $Signature) {
-    [pscustomobject]@{Mode='Inventory only';Version=$ExpectedVersion;Validated=$true;InstallRequested=[bool]$Install;WhatIf=[bool]$WhatIf;Files=$preview.ToArray();Instruction='Para copiar estos archivos, ejecuta de nuevo con -Install. No se modificó la consola.'} | ConvertTo-Json -Depth 5
+    [pscustomobject]@{Mode='Inventory only';Version=$ExpectedVersion;Validated=$true;InstallRequested=[bool]$Install;NroOnly=[bool]$NroOnly;WhatIf=[bool]$WhatIf;Files=$preview.ToArray();Instruction='Para copiar estos archivos, ejecuta de nuevo con -Install. No se modificó la consola.'} | ConvertTo-Json -Depth 5
     return
 }
 
@@ -213,7 +229,7 @@ if (Test-Path -LiteralPath $privateRoot) {
 } else { $null = New-Item -ItemType Directory -Path $privateRoot }
 $receiptRoot = Join-Path $privateRoot ('mtp-'+[guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $receiptRoot
-$receipt = [ordered]@{Mode=$(if($Signature){'Read-only app signature'}else{'Install'});Version=$ExpectedVersion;StartedUtc=[DateTime]::UtcNow.ToString('o');Completed=$false;Files=[Collections.Generic.List[object]]::new();Error=$null}
+$receipt = [ordered]@{Mode=$(if($Signature){'Read-only app signature'}elseif($NroOnly){'Install NRO only'}else{'Install'});Version=$ExpectedVersion;NroOnly=[bool]$NroOnly;StartedUtc=[DateTime]::UtcNow.ToString('o');Completed=$false;Files=[Collections.Generic.List[object]]::new();Error=$null}
 function Save-Receipt {
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptRoot 'receipt.json') -Encoding utf8
 }
@@ -280,7 +296,7 @@ if ($Signature) {
 try {
     $staging = Join-Path $receiptRoot 'incoming'
     $null = New-Item -ItemType Directory -Path $staging
-    foreach ($item in $payload) {
+    foreach ($item in $transferPayload) {
         $relativeLocal = $item.Relative.Replace('/',[IO.Path]::DirectorySeparatorChar)
         $item.Source = Join-Path $staging $relativeLocal
         $null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($item.Source)) -Force
@@ -290,7 +306,7 @@ try {
     Save-Receipt
     # Install the independent resources first and make the menu entry visible
     # last. Never copy directly over an active NRO, payload or configuration.
-    $orderedPayload=@($payload | Sort-Object @{Expression={
+    $orderedPayload=@($transferPayload | Sort-Object @{Expression={
         if ($_.Relative -ceq 'bootloader/ini/ninmagic-guardian.ini') { 3 }
         elseif ($_.Relative -ceq 'switch/NinMagicGuardian/NinMagic-Guardian.nro') { 2 }
         elseif ($_.Relative.StartsWith('config/NinMagicGuardian/rescue/')) { 0 }
@@ -372,7 +388,7 @@ try {
     $receipt.Completed=$true
     $receipt.CompletedUtc=[DateTime]::UtcNow.ToString('o')
     Save-Receipt
-    [pscustomobject]@{Installed='sdmc:/switch/NinMagicGuardian/NinMagic-Guardian.nro';Version=$ExpectedVersion;Sha256=$expectedNroHash;Verified=$true;Receipt=(Join-Path $receiptRoot 'receipt.json');Files=$receipt.Files.Count;OwnRescueAndMenuEntryUpdated=$true;MainBootConfigurationChanged=$false;BackupDataAccessed=$false;SavesAccessed=$false} | ConvertTo-Json
+    [pscustomobject]@{Installed='sdmc:/switch/NinMagicGuardian/NinMagic-Guardian.nro';Version=$ExpectedVersion;Sha256=$expectedNroHash;Verified=$true;Receipt=(Join-Path $receiptRoot 'receipt.json');Files=$receipt.Files.Count;NroOnly=[bool]$NroOnly;RescueUpdated=(-not $NroOnly);OwnRescueAndMenuEntryUpdated=(-not $NroOnly);MainBootConfigurationChanged=$false;BackupDataAccessed=$false;SavesAccessed=$false} | ConvertTo-Json
 } catch {
     $receipt.Error=$_.Exception.Message
     Save-Receipt

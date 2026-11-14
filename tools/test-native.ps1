@@ -16,7 +16,7 @@ try {
     $env:MSYS='winsymlinks:lnk'
     $include=Join-Path $projectRoot 'include'
     $objects=@()
-    foreach ($source in @('guardian_core','guardian_sha256')) {
+    foreach ($source in @('guardian_core','guardian_sha256','guardian_addons','guardian_recovery')) {
         $object=Join-Path $testRoot ($source+'.o')
         Invoke-Checked $cc @('-std=c11','-O2','-Wall','-Wextra','-Werror','-I',$include,'-c',(Join-Path $projectRoot ('source/'+$source+'.c')),'-o',$object)
         $objects+=$object

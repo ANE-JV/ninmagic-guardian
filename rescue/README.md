@@ -42,6 +42,29 @@ causa: el usuario elige cuales apartar y confirma. Solo mueve `boot2.flag` de
 los modulos y el `romfs` del tema HOME fijo; los mods de juegos permanecen.
 Se pueden reactivar los elementos apartados, sin sustituir destinos existentes.
 
+La restauracion integrada revisa esos cambios antes de confirmar y muestra sus
+IDs y tipos. Recomienda restaurar y apartar temporalmente TODOS los cambios
+mostrados para probar el arranque, conservando la posibilidad de reactivarlos.
+Tambien permite elegir explicitamente eliminarlos definitivamente o restaurar
+solo archivos. El cursor empieza en Cancelar; la eliminacion exige una segunda
+confirmacion de que no quedara una copia recuperable de esos extras. Sin
+inventario fiable se informa de que no se pudo revisar; no se elimina nada
+automaticamente.
+El mismo helper C valida primero todo el respaldo y sus destinos, aparta de
+forma temporal los activadores/tema elegidos y despues recupera los archivos.
+Si se eligio eliminacion definitiva, solo tras finalizar correctamente elimina
+el contenido del plan confirmado.
+Si falla conserva diarios y datos necesarios para continuar esa operacion,
+sin borrar indiscriminadamente archivos nuevos, juegos ni datos de usuario.
+Un plan pendiente se muestra completo antes de continuar su eliminacion; no se
+amplia silenciosamente con nuevos candidatos. La opcion manual de apartar
+reversiblemente permanece separada. Esto cubre esos mecanismos de arranque
+conocidos, sin asegurar la causa de todos los fallos.
+
+La carpeta `switch` queda completamente fuera del respaldo y la restauracion.
+No se copian ni sustituyen las aplicaciones NRO, sus carpetas de datos,
+los juegos ni los ports. El formato de respaldo anterior sigue siendo legible.
+
 La identidad del NRO es el CID crudo de 16 bytes que devuelve libnx, expresado
 en 32 digitos hexadecimales minusculos. La 0.1.1 invierte exactamente el
 desplazamiento de ocho bits que Hekate aplica a los cuatro registros SDHCI R2,

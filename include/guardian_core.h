@@ -37,6 +37,7 @@ typedef struct {
   int (*free_space)(void *, uint64_t *);
   /* Optional fault hook: zero success, nonzero interruption/error. */
   int (*checkpoint)(void *, const char *, const char *);
+
 } gc_fs;
 typedef struct {
   gc_fs fs;
@@ -73,6 +74,10 @@ gc_result gc_create_backup(gc_context *, unsigned options);
  * Guardian's own rescue .bin/Minerva are verified in legacy backups but never
  * restored, so restoring an old environment cannot undo a rescue update. */
 gc_result gc_restore(gc_context *);
+/* Read-only restoration preflight: complete hashes, same SD, pending journal,
+ * protected rescue resources. The switch folder is always excluded. Does not
+ * promote an interrupted backup; finish that separate action first. */
+gc_result gc_restore_preflight(gc_context *);
 /* Resume interrupted backup promotion/cleanup, then inspect; does not restore
  * system files. gc_restore itself resumes an interrupted restore. */
 gc_result gc_recover_backup(gc_context *);

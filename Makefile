@@ -44,7 +44,7 @@ DATA		:=
 INCLUDES	:=	include
 APP_TITLE := NinMagic Guardian
 APP_AUTHOR := NinMagic
-APP_VERSION := 0.1.3
+APP_VERSION := 0.2.0
 ICON := assets/icon.jpg
 ROMFS		:=	romfs
 

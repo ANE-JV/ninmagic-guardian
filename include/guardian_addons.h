@@ -18,6 +18,7 @@ typedef struct {
   char message[512];
   char backup_sha256[65];
   ga_candidate candidates[GA_MAX_CANDIDATES];
+  int discard_pending;
 } ga_review;
 typedef struct {
   int ok, recovery_required;
@@ -38,6 +39,21 @@ ga_result ga_quarantine(gc_context *, const ga_review *);
 /* Re-enable the exact quarantined entries; no existing destination is replaced.
  */
 ga_result ga_restore_quarantine(gc_context *);
+/* Read-only check for integrated recovery: 1 if the intact pending plan covers
+ * every supplied candidate exactly, 0 if absent/different, -1 on read/identity
+ * error. Does not extend an already confirmed quarantine operation. */
+int ga_pending_covers(gc_context *, const ga_review *);
+/* Read-only exact pending plan for confirmation, including its original IDs
+ * after a partial permanent deletion. 0 success (possibly no active plan),
+ * -1 error with review.ok=0/message. Never derives a broader candidate list. */
+int ga_pending_review(gc_context *, ga_review *);
+/* Irreversibly discard ONLY an exact, fully quarantined confirmed plan after
+ * successful environment recovery. A sealed intent enumerates file hashes and
+ * exact directories; retries delete only those same owned quarantine paths.
+ * A successful deletion retains only a small content-free completion seal.
+ * No live paths, switch,
+ * games or whole module folders are deleted. The plan is removed last. */
+ga_result ga_discard_quarantine(gc_context *);
 #ifdef __cplusplus
 }
 #endif

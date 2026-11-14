@@ -85,7 +85,8 @@ Opciones explícitas:
 - `GC_OPT_PAYLOADS`: archivos BIN adicionales de `bootloader/payloads`, incluidos
   los que un INI referencie dentro de esa carpeta.
 
-Se excluyen juegos, ports y datos de aplicaciones de `switch`, `Nintendo`,
+Se excluye **toda la carpeta `switch`**, incluidos NRO de utilidades, juegos,
+ports y datos de aplicaciones. También se excluyen `Nintendo`,
 Android/Linux, contenido eMMC/emuMMC y **todo** `atmosphere/contents` (incluidos
 mods, cheats, temas y sysmodules). También se excluyen logs, informes de errores,
 copias automáticas de claves y cualquier otra ruta no enumerada. Las carpetas
@@ -266,7 +267,8 @@ ocupa el destino; no sobrescribe nada. Reactivar depende del CID y del plan
 
 Crear un respaldo nuevo se bloquea tanto en el motor como en la UI si existe un
 plan activo, para conservar la referencia de comparación. El diario de aislamiento
-se retira solo cuando todas las entradas han vuelto. Las carpetas vacías de
+se retira solo cuando todas las entradas han vuelto o termina una eliminación
+expresamente confirmada. Las carpetas vacías de
 aislamiento pueden permanecer y no afectan al arranque. La integridad por SHA-256
 no es una firma ni protege contra alguien que edite manualmente los registros
 y recalcule sus hashes con acceso completo a la SD.
@@ -276,3 +278,104 @@ marcador vacío con ejecutable cambiado, CID distinto, plan interrumpido,
 manipulación de archivos apartados, colisiones del destino, carpetas en lugar
 del inventario y reactivación sin el sello del respaldo actual. También comprueban
 que una ruta lógica larga del tema pueda moverse a la carpeta interna y volver.
+
+## Recuperación integrada de archivos y extras confirmados (0.2.0)
+
+El NRO y el rescatador comparten `gr_restore` de `guardian_recovery.h`. La UI
+obtiene una revisión de `ga_inspect`, muestra los candidatos y permite confirmar
+el apartado de todos o de una selección. Esos candidatos solo son módulos con
+`boot2.flag` y el tema de HOME definido anteriormente; no se interpreta cualquier
+archivo nuevo como un fallo ni se amplía la acción a KIPs, juegos o carpetas
+arbitrarias. La UI debe explicar que los cambios no demuestran cuál causó el
+problema. También existe la elección explícita «solo archivos»; sin inventario
+comparable solo se ofrece esa elección con su aviso, nunca un apartado automático.
+
+1. `gc_restore_preflight` comprueba en modo de solo lectura el respaldo completo,
+   CID, diario pendiente y recursos propios protegidos. No inspecciona ni
+   modifica archivos de `switch`. Una sustitución de respaldo pendiente
+   debe terminarse desde la acción separada de recuperación del respaldo.
+2. Si se confirmó un apartado, `ga_quarantine` publica el diario íntegro y mueve
+   únicamente las entradas confirmadas, conservándolas para reactivación.
+   Si ya había un plan, `ga_pending_covers` exige que los candidatos mostrados
+   pertenezcan a ese mismo plan (tipo, ID, huella y respaldo). No se mezcla una
+   selección distinta con el plan anterior.
+3. Solo cuando el apartado termina correctamente se llama a `gc_restore`, que
+   vuelve a verificar los datos y recupera exclusivamente los archivos del entorno cubiertos.
+
+Si falla el apartado, no comienza la restauración de archivos. Si la restauración
+se interrumpe después, se informa de que los extras siguen apartados y se conservan
+ambos diarios para reintentar. Una duda al leer el plan no se trata como ausencia:
+se bloquea la acción y se conserva el estado. Un reintento continúa el mismo plan
+confirmado y el diario de archivos. El resultado expone los cambios de la llamada
+y si sigue existiendo un aislamiento; no afirma haber detectado la causa del fallo.
+La elección explícita de solo archivos no aparta complementos nuevos y el mensaje
+lo recuerda. El aislamiento previo permanece reversible mientras no se haya publicado una
+intención de eliminación permanente. En ese caso solo se permite continuar el
+plan completo ya confirmado o cancelar.
+
+`tests/recovery_test.c` comprueba el orden real apartado→archivos, reposición de
+archivos del entorno, rechazo de huellas caducadas, identidad distinta y errores
+de lectura sin cambios, interrupciones en ambas fases y su reanudación, cobertura
+de un plan anterior y archivos nuevos de juegos/herramientas conservados por hash.
+
+La carpeta `switch` no se copia, analiza ni restaura en ninguna de estas acciones.
+Las pruebas usan archivos con extensión `.nro` como datos opacos y comprueban que
+los añadidos después de una copia permanecen idénticos por SHA-256. Si se borra
+un NRO excluido, restaurar el entorno no lo recrea. Las opciones siguen limitadas
+a 0..3 y el único formato de manifiesto aceptado es `NMGUARDIAN1`.
+
+
+### Eliminación permanente expresamente confirmada
+
+`gr_restore_mode(ctx, revision, 1)` exige una confirmación adicional e irreversible.
+Primero aparta la selección, después restaura y verifica los archivos del entorno
+y **solo al terminar correctamente** llama a `ga_discard_quarantine`. Si hay un
+plan previo, la revisión debe contener **todas** sus entradas exactas, sin omisiones,
+duplicados ni ampliaciones. `NULL` con modo permanente es un error. `gr_restore`
+conserva el comportamiento temporal y reversible.
+
+Antes de borrar el primer archivo, `discard.txt` se publica con sincronización,
+sello propio, CID y SHA-256 del plan exacto. Enumera los archivos por ruta,
+tamaño y SHA-256, y también cada directorio exacto del tema. Solo admite rutas
+derivadas de las entradas confirmadas dentro de `quarantine/active/data`:
+`<ID>/flags/boot2.flag` y `0100000000001000/romfs/...`. No admite rutas prestadas,
+traversal, enlaces, archivos especiales, duplicados ni recorridos de borrado libres.
+Se revisan todos los datos restantes antes de continuar y cada archivo justo
+antes de borrarlo. Los directorios se quitan exclusivamente si están registrados
+y vacíos; se rechazan archivos o carpetas nuevas que aparezcan en el apartado.
+
+Los archivos ausentes en un reintento se consideran pasos ya completados de esa
+misma intención. No se exige que una carpeta parcialmente eliminada siga teniendo
+la huella original completa: la lista sellada de archivos y directorios permite
+terminar sin ampliar el alcance. Un origen activo que reaparezca bloquea la
+operación y se conserva. La intención es irreversible: mientras exista no se
+puede reactivar, ampliar el plan ni cambiar a una restauración temporal o solo
+de archivos desde el coordinador integrado.
+
+Al desaparecer todo el contenido confirmado se publica `discard.done`, ligado al
+CID, al plan y a la intención. Después se retira `discard.txt` y **el plan se
+retira en último lugar**. El pequeño sello final no contiene datos para reactivar
+complementos y permite reconocer un cierre interrumpido. No impide crear un
+respaldo/inventario nuevo; el siguiente apartado elimina únicamente ese sello
+completado. Una intención huérfana o ilegible bloquea la sustitución del respaldo
+y del inventario. No se borra su registro para ocultar la incertidumbre.
+
+`ga_pending_review` es de solo lectura, devuelve `0` o `-1` y muestra siempre las
+entradas del plan original, incluso tras una eliminación parcial. Sus indicadores
+`quarantine_pending` y `discard_pending` permiten explicar en pantalla qué está
+pendiente. Las tres elecciones visibles son solo archivos, apartado temporal
+recomendado y eliminación definitiva con otra confirmación. El usuario revisa la
+lista: nuevo/cambiado no significa que se haya probado culpabilidad.
+
+La eliminación de un módulo quita solo su marcador de arranque, no su ejecutable
+ni su carpeta completa. La del tema quita solo el `romfs` apartado de HOME.
+Juegos, sus mods, cheats, partidas y toda la carpeta `switch` permanecen excluidos.
+No se promete reparar cualquier causa de fallo de arranque.
+
+`tests/discard_test.c` inyecta cortes después de cada archivo y directorio del
+apartado, y durante intención/cierre/retirada de registros; también comprueba
+fallos de borrado, selecciones incompletas o duplicadas, datos modificados,
+archivos y carpetas nuevos, objetos especiales, CID distinto, rutas prestadas,
+plan huérfano, orden restauración antes de borrado, reintentos parciales y una nueva
+copia e inventario tras completar la eliminación. Los NRO y archivos nuevos de
+juegos se usan como datos opacos para comprobar que siguen intactos.

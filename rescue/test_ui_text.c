@@ -50,6 +50,11 @@ int main(void){
     info.present=1;info.files=42;info.bytes=11106448;strcpy(info.created,"2001-02-03 04:05 UTC");
     reset(720);guardian_ui_backup_summary(&info);
     assert(!strcmp(screen,"\n  Archivos: 42\n  Respaldo: 10.6 MiB\n  Creado: 2001-02-03 04:05 UTC\n"));assert(!strchr(screen,'%'));guards();
+    reset(720);info.files=142;info.bytes=5379815568ULL;
+    guardian_ui_backup_summary(&info);
+    assert(strstr(screen,"Archivos: 142\n  Respaldo: 5130.6 MiB\n"));
+    assert(strstr(screen,"Creado: 2001-02-03 04:05 UTC\n"));
+    assert(!strchr(screen,'%'));guards();
     reset(720);guardian_ui_printf("Trabajando: %u %%\n",50U);assert(!strcmp(screen,"Trabajando: 50 %\n"));guards();
     reset(720);guardian_ui_printf("FatFs: %d / %s\nCID: %s\n",-1,"leer","78563412f0debc9adf9b5713ac682400");
     assert(!strcmp(screen,"FatFs: -1 / leer\nCID: 78563412f0debc9adf9b5713ac682400\n"));guards();
@@ -70,6 +75,6 @@ int main(void){
     reset(700);guardian_ui_puts("invalid stride");assert(!glyphs);guards();
     reset(736);surface.cell=8;surface.x=712;surface.y=1272;guardian_ui_puts("AB");assert(glyphs==1);guards();
     reset(720);info.present=0;guardian_ui_backup_summary(&info);assert(!screen[0]);guards();
-    puts("PASS: real frontend summary 42/10.6/date; wrap+clip 720x1280 fnt16; glyph and stride canaries; long text/path; bottom, footer, controls and percent literal");
+    puts("PASS: frontend 42/10.6/date and 64-bit size; wrap+clip 720x1280 fnt16; glyph and stride canaries; long text/path; bottom, footer, controls and percent literal");
     return 0;
 }

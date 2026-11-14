@@ -59,7 +59,7 @@ def find_source(name):
 def patch():
     dest=STAGE/"bootloader"/"guardian"
     dest.mkdir()
-    for name in ("guardian_core.c","guardian_sha256.c","guardian_core.h","guardian_sha256.h","guardian_addons.c","guardian_addons.h"):
+    for name in ("guardian_core.c","guardian_sha256.c","guardian_core.h","guardian_sha256.h","guardian_addons.c","guardian_addons.h","guardian_recovery.c","guardian_recovery.h"):
         shutil.copy2(find_source(name),dest/name)
     for name in ("guardian_fatfs.c","guardian_fatfs.h","guardian_format.c","guardian_format.h","test_format.c","guardian_entry.S","guardian_cid.c","guardian_cid.h","test_cid.c","guardian_ui_text.c","guardian_ui_text.h","guardian_ui_hekate.c","test_ui_text.c"):
         shutil.copy2(ROOT/"rescue"/name,dest/name)
@@ -74,7 +74,7 @@ OBJS = start exception_handlers guardian_entry main heap gfx \\
  gpio pinmux pmc se tsec uart fuse kfuse sdmmc sdmmc_driver sd \\
  bq24193 max17050 max7762x max77620-rtc hw_init btn ianos util config \\
  diskio ff ffunicode ffsystem elfload elfreloc_arm \\
- guardian_core guardian_sha256 guardian_addons guardian_fatfs guardian_format guardian_cid guardian_ui_text guardian_ui_hekate
+ guardian_core guardian_sha256 guardian_addons guardian_recovery guardian_fatfs guardian_format guardian_cid guardian_ui_text guardian_ui_hekate
 OBJS := $(addsuffix .o, $(OBJS))
 OBJS := $(addprefix $(BUILDTDIR)/, $(OBJS))
 BDKINC += -I./bootloader/guardian

@@ -1,4 +1,4 @@
-# NinMagic Guardian 0.1.3 — beta
+# NinMagic Guardian 0.2.0 — beta
 
 Respaldo selectivo de los archivos de Atmosphère, Hekate y configuración de
 arranque que están en la microSD. Un NRO para usar cuando Atmosphère funciona
@@ -10,7 +10,7 @@ con un respaldo de NAND, del firmware de Nintendo o de toda la tarjeta.
 
 ## Instalar el ZIP
 
-Extrae `NinMagic-Guardian-0.1.3.zip` en la raíz de la microSD. El ZIP también
+Extrae `NinMagic-Guardian-0.2.0.zip` en la raíz de la microSD. El ZIP también
 se puede ofrecer en tu servidor de herramientas y extraer con NinMagic AIO.
 No incluye ni reemplaza el pack completo de Atmosphère o Hekate.
 
@@ -35,8 +35,9 @@ con azul eléctrico, verde neón y ámbar para distinguirlo de las otras apps.
 3. Espera al resultado de la copia y de la verificación. La copia anterior
    se conserva hasta verificar y promover la nueva. Hace falta espacio
    temporal para ambas generaciones; después queda un respaldo final.
-4. Elige **Preparar rescate en Hekate**. Si instalaste el ZIP completo, comprueba
-   los mismos archivos sin volver a copiarlos.
+4. Elige **Preparar rescate en Hekate** para comprobar o actualizar sus recursos
+   independientes. Si falta o difiere algún recurso, se prepara con verificación
+   y diario de reintento. El respaldo no se modifica durante este paso.
 5. Reinicia a Hekate y abre **More configs > NinMagic Guardian - Rescate SD**.
    La primera vez usa únicamente **Comprobar respaldo**. VOL+/VOL- seleccionan
    y POWER confirma. La restauración requiere otra confirmación.
@@ -68,12 +69,31 @@ En esta beta, mientras haya complementos apartados o un plan pendiente,
 se conserva el respaldo existente y se bloquea crear uno nuevo. Revisa primero
 la recuperación de esos complementos. Reactivarlos puede devolver el fallo.
 
+## Después de probar el arranque
+
+Si la recuperación temporal permite volver a iniciar Atmosphère, abre Guardian
+> **Revisar temas y módulos**. El apartado anterior se muestra con su lista
+completa. **R — Eliminar apartados** abre una confirmación: **X** elimina
+permanentemente los elementos mostrados y **B** cancela. No se repite la
+restauración de archivos. **X — Recuperar apartados** en la pantalla anterior
+permite reactivarlos si aún se conservaron; puede devolver el fallo.
+
+Una eliminación definitiva interrumpida solo puede continuar el mismo plan;
+no se puede reactivar un tema parcialmente eliminado ni añadir otros candidatos.
+Se muestra su lista original completa, incluidos los pasos ya terminados.
+El diario solo elimina rutas propias enumeradas y verificadas. Al completar,
+no quedan copias recuperables de esos elementos: solo un pequeño sello de
+finalización, sin el contenido del tema o los marcadores.
+
 ## Qué se conserva y qué queda fuera
 
 Los archivos esenciales reconocidos se seleccionan automáticamente. Los
 fondos e imágenes del menú y otros payloads son extras opcionales.
 La lista técnica exacta está en `docs/core-format.md` y en
 `gc_managed_path()`; cualquier archivo fuera de ella queda excluido.
+
+La carpeta `switch` completa, incluidos todos sus NRO de herramientas, juegos y
+ports, queda siempre fuera del respaldo. Restaurar no borra sus archivos.
 
 Los juegos instalados, juegos portados, partidas, mods, cheats, Android, Linux
 y el contenido de la emuMMC no forman parte de esta copia y no se borran al
@@ -86,6 +106,28 @@ restaurarlo. Su funcionamiento sigue dependiendo de que el firmware, la
 emuMMC y la instalación de los propios juegos estén en buen estado.
 
 ## Recuperar
+
+Al elegir **Restaurar el arranque**, Guardian revisa también los temas y módulos
+que cambiaron desde la copia. Si hay un inventario válido, quedan seleccionados
+por defecto para apartarlos de forma reversible antes de reponer los archivos.
+**X** permite ver y elegir los cambios; **Y** cambia entre apartado temporal,
+eliminación definitiva y solo archivos. La eliminación requiere una pantalla
+adicional con su lista y confirmación mediante **X**. Si no
+hay inventario comparable, se avisa y no se aparta nada automáticamente.
+No se demuestra que cada cambio sea culpable. El modo temporal conserva los
+elementos apartados para reactivarlos o eliminarlos después; el modo definitivo
+elimina ese contenido solo después de recuperar los archivos del arranque.
+Si falla este apartado confirmado, no continúa la
+restauración; si falla después la copia de archivos, se conservan los diarios
+para reintentar. No se hace una limpieza general de archivos nuevos.
+
+El rescatador ofrece la misma recuperación integrada y muestra primero los
+candidatos y la opción que vas a confirmar. Los complementos se apartan
+desactivando su marcador de inicio, o moviendo el tema HOME a recuperación.
+Los juegos y sus mods no se mueven. Para un módulo se aparta o elimina su
+marcador de inicio, sin borrar la carpeta completa del módulo. Para el tema HOME
+se apartan o eliminan los archivos del tema seleccionado. Un archivo nuevo de otro tipo puede requerir
+un diagnóstico distinto: Guardian no identifica cualquier causa de fallo.
 
 Si abre Atmosphère, usa **Restaurar el arranque** desde Guardian. Si no abre,
 usa el rescatador de Hekate y el mismo respaldo. Los archivos se verifican
@@ -125,8 +167,12 @@ versión publicada; la descarga comprueba nombre, versión, tamaño y SHA-256.
 La instalación pide confirmación y conserva un NRO anterior. Cierra y vuelve
 a abrir Guardian para usar la versión instalada.
 
-El actualizador interno sustituye solo el NRO. Para actualizar también el
-rescatador instala el ZIP completo. Su configuración de canal inicial es:
+El actualizador descarga y sustituye el NRO. Al volver a abrir la app, usa
+**Preparar rescate en Hekate** para aplicar los recursos que lleva dentro.
+El ZIP completo sigue disponible. Si se interrumpe esa preparación, vuelve al
+NRO y repite **Preparar rescate** para continuar su diario. Los tres recursos
+no se sustituyen simultáneamente: no apagues ni retires la tarjeta durante
+esa operación. La configuración de canal inicial es:
 `config/NinMagicGuardian/update-url.txt`. Si falta, se utiliza el canal oficial
 incorporado; una configuración presente pero inválida se informa como error.
 
@@ -136,6 +182,7 @@ incorporado; una configuración presente pero inválida se informa como error.
 - `config/NinMagicGuardian/backup/` — copia verificada y diarios de recuperación
 - `config/NinMagicGuardian/app-update/` — descargas y respaldo del NRO
 - `config/NinMagicGuardian/rescue/` — payload y recurso Minerva independientes
+- `config/NinMagicGuardian/rescue-update/` — diario y copias de la actualización del rescate
 - `bootloader/ini/ninmagic-guardian.ini` — acceso propio en More configs
 
 No modifica `bootloader/hekate_ipl.ini` al instalar el acceso. Si `bootprotect`

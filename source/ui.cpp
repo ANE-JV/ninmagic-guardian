@@ -129,7 +129,7 @@ void logoAt(int x,int y,int size) {
 
 void footer(const std::vector<std::pair<std::string,std::string>>&keys) {
     rect(35,659,1210,1,border);int x=39;
-    for(const auto&k:keys){box(x,677,29,25,raised,border);text(k.first,x+7,682,13,ink);text(k.second,x+37,682,14,muted);x+=width(k.second,14)+60;}
+    for(const auto&k:keys){int keyWidth=std::max(29,width(k.first,13)+14);box(x,677,keyWidth,25,raised,border);text(k.first,x+7,682,13,ink);text(k.second,x+keyWidth+8,682,14,muted);x+=keyWidth+width(k.second,14)+31;}
     text("GUARDIAN / "+std::string(AppVersion),1070,684,12,orange);
 }
 void accent(int x,int y,int w){const Color colors[]={cyan,green,orange};for(int i=0;i<3;++i)rect(x+i*w/3,y,w/3+1,3,colors[i]);}
@@ -161,7 +161,7 @@ void options(const View&v){
     const char*names[]={"Imágenes del menú y fondos de Hekate","Otros payloads de bootloader/payloads"};
     const char*details[]={"Son opcionales. No incluyen las capturas de pantalla.","Son herramientas de arranque, no juegos ni archivos de sus carpetas."};
     for(size_t i=0;i<2;++i){int y=281+int(i)*99;bool on=v.options&(i?GC_OPT_PAYLOADS:GC_OPT_VISUALS);box(62,y,1156,80,raised,v.selected==i?green:border);box(81,y+23,24,24,on?green:panel,on?green:muted);if(on)text("+",86,y+24,16,panel);text(names[i],128,y+12,22);text(details[i],128,y+48,16,muted);}
-    wrapped("Siempre quedan fuera los juegos, puertos, partidas, mods, cheats, sistemas Android/Linux y el contenido de la emuMMC. Lo excluido se conserva en la SD.",63,512,1153,19,3,orange);
+    wrapped("Toda la carpeta switch queda fuera, incluidos herramientas NRO, juegos, ports y datos. Tampoco se copian partidas, mods, cheats, Android/Linux o el contenido de la emuMMC.",63,512,1153,19,3,orange);
     footer({{"A","Marcar"},{"B","Guardar y volver"}});
 }
 void backupConfirm(const View&v){
@@ -170,17 +170,23 @@ void backupConfirm(const View&v){
     text("NUEVA COPIA",62,503,13,green);text(formatBytes(v.source.bytes),62,538,30,cyan);text(std::to_string(v.source.files)+" archivos",62,588,16,muted);
     box(410,244,833,380);accent(411,245,831);text("ATMOSPHÈRE + HEKATE + CONFIGURACIÓN",435,273,15,green);
     wrapped("Se copiarán y verificarán los archivos reconocidos del arranque. El respaldo anterior se conserva hasta verificar y promover el nuevo.",435,319,779,23,4);
-    wrapped("Necesitas espacio temporal para la copia nueva. Al terminar solo se mantiene un respaldo válido. No se copian juegos ni se modifica la memoria interna.",435,467,779,18,4,muted);
+    wrapped("Necesitas espacio temporal para la copia nueva. Al terminar solo se mantiene un respaldo válido. La carpeta switch y los juegos quedan fuera; no se modifica la memoria interna.",435,467,779,18,4,muted);
     footer({{"A","Todo funciona bien: crear respaldo"},{"B","Cancelar"}});
 }
 void restoreConfirm(const View&v){
     heading("Restaurar el último respaldo","Se verificarán las huellas antes de sustituir los archivos incluidos");
     box(37,244,1206,380);accent(38,245,1204);text("COPIA GUARDADA",63,273,13,green);
-    text(std::to_string(v.backup.files)+" archivos / "+formatBytes(v.backup.bytes),63,308,28);text("Creada: "+std::string(v.backup.created),63,356,18,muted);
-    text("Firmware registrado: "+std::string(v.backup.firmware),63,394,18,cyan);
-    wrapped("Los juegos, partidas y carpetas excluidas se conservan. Se recuperan los archivos del respaldo; los añadidos posteriores no se eliminan automáticamente.",63,446,1154,21,3);
-    wrapped("Esta copia no deshace una actualización de Nintendo ni crea compatibilidad con un firmware nuevo. Si una restauración se interrumpe, vuelve a esta opción o usa el rescatador.",63,548,1154,18,3,orange);
-    footer({{"A","Confirmar restauración"},{"B","Cancelar"}});
+    text(std::to_string(v.backup.files)+" archivos / "+formatBytes(v.backup.bytes),63,308,28);text("Creada: "+std::string(v.backup.created),63,351,17,muted);
+    text("Firmware registrado: "+std::string(v.backup.firmware),63,382,17,cyan);
+    unsigned selected=0;for(bool marked:v.markedAddons)if(marked)++selected;
+    std::string changes=!v.addons.ok?"Sin inventario comparable: se restaurarán solo archivos.":v.addons.discard_pending?"Eliminación ya confirmada: se continuará el mismo plan.":v.addons.count?(v.restoreAddons?(v.restorePermanent?"Se eliminarán definitivamente ":"Se apartarán temporalmente ")+std::to_string(selected)+" cambios. X: ver selección.":"Los cambios de arranque nuevos seguirán activos. Y: apartarlos."):"No hay cambios de arranque reconocidos para apartar.";
+    fitted(changes,63,414,1154,17,v.restoreAddons?green:orange);
+    wrapped("Se recuperan los archivos del respaldo. Los juegos, partidas y la carpeta switch se conservan. Los cambios de arranque elegidos seguirán el modo indicado.",63,452,1154,18,2);
+    wrapped(v.restoreAddons?(v.restorePermanent?"Tras restaurar se eliminará definitivamente el contenido apartado de la selección. No podrá recuperarse. Un cambio no demuestra cuál causó el fallo.":"Recomendado para probar el arranque sin adivinar el culpable. Los temas y módulos elegidos se apartan temporalmente y pueden recuperarse o eliminarse después."):"Restaurar archivos por sí solo puede no resolver un fallo causado por un tema o módulo nuevo que siga activo.",63,518,1154,17,2,orange);
+    wrapped("No deshace actualizaciones de Nintendo. Si se interrumpe, vuelve a Restaurar o usa el rescatador.",63,585,1154,15,2,muted);
+    std::vector<std::pair<std::string,std::string>> keys={{"A",v.restoreAddons?(v.restorePermanent?(v.addons.discard_pending?"Continuar eliminación":"Revisar eliminación"):"Restaurar y probar"):"Restaurar archivos"}};
+    if(v.addons.ok&&v.addons.count){keys.push_back({"X","Ver cambios"});if(!v.addons.discard_pending)keys.push_back({"Y",!v.restoreAddons?"Apartar cambios":v.restorePermanent?"Solo archivos":"Eliminar definitivamente"});}
+    keys.push_back({"B","Cancelar"});footer(keys);
 }
 void rescueConfirm(){
     heading("Preparar rescate en Hekate","Hazlo ahora, antes de necesitar recuperar Atmosphère");
@@ -192,16 +198,29 @@ void rescueConfirm(){
     footer({{"A","Preparar y verificar acceso"},{"B","Cancelar"}});
 }
 
-void addonReview(const View&v){
-    heading("Posibles cambios del arranque","Compara con el respaldo; un cambio no demuestra la causa del fallo");
+void addonReview(const View&v,bool restoring=false){
+    heading(restoring?"Cambios de arranque al restaurar":"Posibles cambios del arranque",restoring?"Puedes apartar todos para probar el arranque sin tener que adivinar el culpable":"Compara con el respaldo; un cambio no demuestra la causa del fallo");
     box(37,244,748,380);accent(38,245,746);box(804,244,439,380);accent(805,245,437);
     if(!v.addons.ok||!v.addons.count)wrapped(v.addons.message,63,285,696,21,9,v.addons.ok?muted:orange);
     const unsigned start=unsigned(v.selected/6)*6;
     for(unsigned i=start;i<v.addons.count&&i<start+6;++i){int y=266+int(i-start)*50;const auto&c=v.addons.candidates[i];bool sel=v.selected==i;box(52,y,718,44,sel?raised:panel,sel?green:border);bool marked=i<v.markedAddons.size()&&v.markedAddons[i];box(65,y+13,17,17,marked?green:panel,marked?green:muted);if(marked)text("+",68,y+13,13,panel);fitted(c.kind==GA_HOME_THEME?"Tema del menú HOME":"Módulo de arranque "+std::string(c.title_id),96,y+6,659,17);text(c.newly_added?"Añadido después del respaldo":"Cambió desde el respaldo",97,y+28,12,orange);}
-    text("APARTAR DE FORMA REVERSIBLE",827,274,13,green);
-    wrapped("Los módulos se desactivan apartando su marcador de inicio. El tema se mueve a una carpeta de recuperación. Los mods de los juegos se conservan.",827,316,390,21,6);
-    wrapped(v.addons.quarantine_pending?"Hay un apartado pendiente: Y revisa cómo continuarlo.":"A marca, Y revisa antes de apartar. X permite recuperar lo que apartaste.",827,514,390,17,4,orange);
-    footer({{"A","Marcar"},{"Y","Revisar"},{"X","Recuperar apartados"},{"B","Volver"}});
+    text(v.addons.discard_pending?"ELIMINACIÓN YA CONFIRMADA":restoring&&v.restorePermanent?"ELIMINACIÓN DEFINITIVA":"APARTAR DE FORMA REVERSIBLE",827,274,13,green);
+    wrapped(v.addons.discard_pending||(restoring&&v.restorePermanent)?"Se eliminarán los marcadores de inicio de los módulos elegidos y los archivos del tema HOME apartado. Los juegos y sus mods se conservan.":"Los módulos se desactivan apartando su marcador de inicio. El tema se mueve a una carpeta de recuperación. Los mods de los juegos se conservan.",827,316,390,21,6);
+    wrapped(v.addons.discard_pending?"Se muestra el plan original completo, incluso pasos terminados. Solo se puede continuar esa eliminación o cancelar.":restoring?(v.addons.quarantine_pending?"Se muestra todo el apartado anterior. Y vuelve al resumen; eliminarlo requerirá confirmación nueva.":"A elige, X marca todos o ninguno. Y vuelve al resumen; no se han modificado archivos."):v.addons.quarantine_pending?"Comprueba que el arranque funciona antes de usar R para eliminar definitivamente estos apartados.":"A marca, Y revisa antes de apartar. X permite recuperar lo que apartaste.",827,514,390,17,4,orange);
+    if(restoring){std::vector<std::pair<std::string,std::string>>keys;if(!v.addons.quarantine_pending&&!v.addons.discard_pending){keys.push_back({"A","Marcar"});keys.push_back({"X","Todos / ninguno"});}keys.push_back({"Y","Revisar restauración"});keys.push_back({"B","Volver"});footer(keys);}
+    else {std::vector<std::pair<std::string,std::string>>keys;if(!v.addons.discard_pending){if(!v.addons.quarantine_pending)keys.push_back({"A","Marcar"});keys.push_back({"Y","Revisar"});keys.push_back({"X","Recuperar apartados"});}if(v.addons.ok&&(v.addons.quarantine_pending||v.addons.discard_pending)&&v.addons.count)keys.push_back({"R",v.addons.discard_pending?"Continuar eliminación":"Eliminar apartados"});keys.push_back({"B","Volver"});footer(keys);}
+}
+void discardConfirm(const View&v){
+    heading("Confirmar eliminación definitiva","X confirma la selección mostrada; B cancela. Esto no demuestra quién causó el fallo");
+    box(37,244,748,380);accent(38,245,746);box(804,244,439,380);accent(805,245,437);
+    unsigned count=0;for(unsigned i=0;i<v.addons.count;++i)if(!v.discardWithRestore||v.addons.quarantine_pending||v.addons.discard_pending||(i<v.markedAddons.size()&&v.markedAddons[i]))++count;
+    text(std::to_string(count)+" ELEMENTOS PARA ELIMINAR",62,267,15,orange);
+    const unsigned start=unsigned(v.selected/6)*6;
+    for(unsigned i=start;i<v.addons.count&&i<start+6;++i){const auto&c=v.addons.candidates[i];const bool chosen=!v.discardWithRestore||v.addons.quarantine_pending||v.addons.discard_pending||(i<v.markedAddons.size()&&v.markedAddons[i]);const int y=306+int(i-start)*46;box(52,y,718,40,i==v.selected?raised:panel,i==v.selected?orange:border);fitted(c.kind==GA_HOME_THEME?"Tema HOME":"Módulo "+std::string(c.title_id),65,y+12,440,17,chosen?ink:dim);text(chosen?"ELIMINAR":"CONSERVAR",570,y+13,13,chosen?orange:muted);}
+    text("SIN COPIA RECUPERABLE AL TERMINAR",827,272,13,orange);
+    wrapped(v.discardWithRestore?"Primero se restaurarán los archivos del respaldo. Después se eliminará definitivamente el contenido apartado de esta selección.":"Se eliminará definitivamente el contenido de este apartado. Hazlo después de comprobar que Atmosphère arranca. No se repite la restauración.",827,315,389,20,6);
+    wrapped("Se comprobará el rescatador compatible. Se eliminan marcadores de inicio y el tema apartado; no carpetas enteras de módulos, juegos, partidas, switch ni la copia del arranque.",827,488,389,16,5,muted);
+    footer({{"D-PAD","Ver lista"},{"X","Confirmar eliminación definitiva"},{"B","Cancelar"}});
 }
 void addonConfirm(const View&v,bool reactivate){
     heading(reactivate?"Recuperar complementos apartados":"Confirmar apartado de complementos",reactivate?"No se reemplazará ningún archivo nuevo que ocupe su ruta":"Se vuelven a comprobar los cambios antes de moverlos");
@@ -278,6 +297,6 @@ bool uiInit(const std::string&assetRoot) {
 }
 
 void uiDraw(uint32_t*pixels,int stride,const View&v){if(!pixels||stride<W)return;fb=pixels;pitch=stride;if(background.size()==W*H)for(int y=0;y<H;++y)std::memcpy(fb+y*pitch,background.data()+y*W,W*sizeof(Color));else rect(0,0,W,H,rgb(6,15,25));header(v);switch(v.screen){
-case Screen::Home:home(v);break;case Screen::Options:options(v);break;case Screen::BackupConfirm:backupConfirm(v);break;case Screen::RestoreConfirm:restoreConfirm(v);break;case Screen::RescueConfirm:rescueConfirm();break;case Screen::AddonReview:addonReview(v);break;case Screen::QuarantineConfirm:addonConfirm(v,false);break;case Screen::ReactivateConfirm:addonConfirm(v,true);break;case Screen::Help:help();break;case Screen::Update:update(v);break;case Screen::ConfirmUpdate:confirmation(v,false);break;case Screen::ConfirmArchive:confirmation(v,true);break;case Screen::Busy:busy(v);break;case Screen::Result:result(v);break;}}
+case Screen::Home:home(v);break;case Screen::Options:options(v);break;case Screen::BackupConfirm:backupConfirm(v);break;case Screen::RestoreConfirm:restoreConfirm(v);break;case Screen::RestoreChanges:addonReview(v,true);break;case Screen::DiscardConfirm:discardConfirm(v);break;case Screen::RescueConfirm:rescueConfirm();break;case Screen::AddonReview:addonReview(v);break;case Screen::QuarantineConfirm:addonConfirm(v,false);break;case Screen::ReactivateConfirm:addonConfirm(v,true);break;case Screen::Help:help();break;case Screen::Update:update(v);break;case Screen::ConfirmUpdate:confirmation(v,false);break;case Screen::ConfirmArchive:confirmation(v,true);break;case Screen::Busy:busy(v);break;case Screen::Result:result(v);break;}}
 void uiExit(){fonts.clear();rawFont.clear();logo.clear();background.clear();fb=nullptr;pitch=W;}
 }

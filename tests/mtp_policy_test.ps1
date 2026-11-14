@@ -11,13 +11,32 @@ foreach($name in @('allowedFiles','allowedFolders')){
     if(!$node){throw "Missing policy $name"}
     . ([scriptblock]::Create($node.Extent.Text))
 }
-foreach($name in @('Find-Folder','Find-Leaf','Ensure-Folder','Resolve-Parent','Wait-Folder')){
+foreach($name in @('Find-Folder','Find-Leaf','Ensure-Folder','Resolve-Parent','Wait-Folder','Assert-TransferMode','Select-TransferPayload')){
     $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true)
     . ([scriptblock]::Create($node.Extent.Text))
 }
 $script:checks=0;$script:mutations=0
 function Check([bool]$Value){$script:checks++;if(!$Value){throw "MTP policy check $script:checks failed."}}
 function Reject([scriptblock]$Call){$failed=$false;try{&$Call|Out-Null}catch{$failed=$true};Check $failed}
+Assert-TransferMode $false $false $false
+Assert-TransferMode $true $false $false
+Assert-TransferMode $false $true $false
+Assert-TransferMode $true $false $true
+Check $true
+Reject { Assert-TransferMode $true $true $false }
+Reject { Assert-TransferMode $false $false $true }
+Reject { Assert-TransferMode $false $true $true }
+Reject { Assert-TransferMode $true $true $true }
+$items=@($allowedFiles | ForEach-Object { [pscustomobject]@{Relative=$_} })
+$full=@(Select-TransferPayload $items $false)
+$one=@(Select-TransferPayload $items $true)
+Check ($full.Count -eq 14 -and ($full.Relative -join "`n") -ceq ($allowedFiles -join "`n"))
+Check ($one.Count -eq 1 -and $one[0].Relative -ceq 'switch/NinMagicGuardian/NinMagic-Guardian.nro')
+Reject { Select-TransferPayload $one $true }
+$bad=@($items | Select-Object -Skip 1)+@([pscustomobject]@{Relative='atmosphere/package3'})
+Reject { Select-TransferPayload $bad $true }
+Reject { Select-TransferPayload ($items+@($items[0])) $false }
+Check ($ast.ParamBlock.Parameters.Name.VariablePath.UserPath -ccontains 'NroOnly')
 function New-MockFolder {
     $folder=[pscustomobject]@{Children=[Collections.Generic.List[object]]::new()}
     $folder | Add-Member ScriptMethod Items {return @($this.Children.ToArray())}

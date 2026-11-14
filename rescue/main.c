@@ -9,6 +9,7 @@
 #include "config.h"
 #include "guardian_core.h"
 #include "guardian_addons.h"
+#include "guardian_recovery.h"
 #include "guardian_fatfs.h"
 #include "guardian_ui_text.h"
 
@@ -44,7 +45,7 @@ static void header(const char *title) {
     gfx_clear_color(BG); gfx_con.fntsz=16;
     gfx_con_setcol(BLUE,1,BG); gfx_con_setpos(24,30);
     guardian_ui_puts("NINMAGIC GUARDIAN\n\n");
-    gfx_con_setcol(NEON_GREEN,1,BG); guardian_ui_printf("  RESCATE SD - 0.1.3\n\n");
+    gfx_con_setcol(NEON_GREEN,1,BG); guardian_ui_printf("  RESCATE SD - 0.2.0\n\n");
     gfx_con_setcol(TXT_CLR_DEFAULT,1,BG); guardian_ui_printf("  %s\n\n",title);
     guardian_ui_printf("  %s | Solo archivos de la microSD\n",ctx.model);
     guardian_ui_puts("  Sin acceso a NAND / emuMMC\n\n");
@@ -97,15 +98,21 @@ static void progress(void *u,const char *path,uint64_t done,uint64_t total) {
     guardian_ui_clip(0,0,720,1120);
     maintain_memory();
 }
-static void show_result(gc_result r) {
+static void show_result_detail(gc_result r,int apartados,unsigned changed) {
     header(r.ok?"Operacion completada":"Revisa el resultado");
     gfx_con_setcol(r.ok?BLUE:AMBER,1,BG);
     guardian_ui_printf("  %s\n",r.message);
     guardian_ui_backup_summary(&r.info);
+    if (apartados) {
+        if(changed)guardian_ui_printf("\n  Apartados en esta operacion: %u\n",changed);
+        else guardian_ui_puts("\n  Se conserva un plan de extras apartados.\n");
+        guardian_ui_puts("  Revisa el estado del plan en el menu.\n");
+    }
     if (r.recovery_required) guardian_ui_puts("\n  Conserva el respaldo. Reintenta recuperar.\n");
     if (r.info.present) guardian_ui_printf("\n  Firmware de la copia: %s\n",r.info.firmware);
     wait_key();
 }
+static void show_result(gc_result r) {show_result_detail(r,0,0);}
 static int matching_backup(void) {
     guardian_fatfs_clear_error();
     gc_result r=gc_inspect(&ctx,0);
@@ -151,6 +158,80 @@ static void show_addon_result(ga_result r) {
     if (r.recovery_required) guardian_ui_puts("\n  Hay una operacion confirmada pendiente.\n  Puedes reanudarla desde esta opcion.\n");
     wait_key();
 }
+static int review_restore_changes(const ga_review *review) {
+    if (!review->ok || !review->count) return 1;
+    for (unsigned start=0;start<review->count;start+=10) {
+        unsigned end=start+10;if(end>review->count)end=review->count;
+        header(review->quarantine_pending?"Plan confirmado antes de continuar":"Cambios de arranque antes de restaurar");
+        gfx_con_setcol(AMBER,1,BG);
+        if(review->discard_pending)
+            guardian_ui_puts("  Plan completo de eliminacion autorizada.\n  Incluye partes que ya se hayan terminado.\n\n");
+        else if(review->quarantine_pending)
+            guardian_ui_puts("  Estos extras ya estan apartados.\n  Su eliminacion aun requiere confirmacion.\n\n");
+        else guardian_ui_puts("  Son nuevos o cambiaron desde la copia.\n  No demuestra que sean la causa del fallo.\n\n");
+        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG);
+        for(unsigned i=start;i<end;i++) {
+            const ga_candidate *c=&review->candidates[i];
+            guardian_ui_printf("  %s\n  %s / %s\n\n",c->title_id,
+                c->kind==GA_HOME_THEME?"Tema HOME":"Modulo de arranque",c->newly_added?"Nuevo":"Cambiado");
+        }
+        guardian_ui_clip(0,1144,720,1264);gfx_con_setpos(24,1160);
+        gfx_con_setcol(NEON_GREEN,1,BG);
+        guardian_ui_puts("POWER: siguientes / continuar\nVOL +/-: cancelar restauracion");
+        u32 b=wait_buttons();guardian_ui_clip(0,0,720,1120);
+        if(b&(BTN_VOL_UP|BTN_VOL_DOWN))return 0;
+    }
+    return 1;
+}
+/* 0 cancel, 1 files + irreversible removal of ALL entries just displayed,
+ * 2 explicitly files only, 3 files + reversible temporary quarantine.
+ * No operation is selected by default: the cursor starts at Cancelar. */
+static int choose_restore(const ga_review *review) {
+    int can_delete=review->ok&&review->count;
+    unsigned selected=0,count=review->discard_pending?(can_delete?2:1):(can_delete?4:2);
+    for(;;) {
+        header("Confirma como recuperar el sistema");
+        guardian_ui_clip(0,0,720,784);
+        gfx_con_setcol(AMBER,1,BG);
+        guardian_ui_printf("  Firmware de la copia: %s\n",backup_firmware);
+        guardian_ui_puts("  El firmware actual no se lee en rescate.\n  La copia debe seguir siendo compatible.\n\n");
+        if(!review->ok) {
+            guardian_ui_puts("  NO SE PUDO REVISAR EL ARRANQUE:\n");
+            guardian_ui_printf("  %s\n\n",review->message);
+        } else if(review->count) {
+            guardian_ui_printf("  %u cambios mostrados. Solo afectaria a\n  activadores boot2.flag y al tema HOME.\n  Los mods de juegos no se mueven.\n\n",review->count);
+        } else guardian_ui_puts("  Sin nuevos cambios de arranque detectados.\n\n");
+        if(review->quarantine_pending)guardian_ui_puts("  Existe un plan de apartados confirmado.\n  Eliminar afecta solo al plan mostrado.\n  Otros cambios nuevos no se incluyen aqui.\n\n");
+        guardian_ui_clip(0,800,720,1120);gfx_con_setpos(24,816);
+        gfx_con_setcol(AMBER,1,BG);
+        if(review->discard_pending)
+            guardian_ui_puts("  Eliminacion ya autorizada e interrumpida.\n  Solo puedes continuar ese plan o cancelar.\n\n");
+        else {
+            if(can_delete)guardian_ui_puts("  Recomendado: apartar primero y probar.\n");
+            guardian_ui_puts("  Solo archivos deja activos los extras\n  no apartados; pueden impedir el arranque.\n\n");
+        }
+        for(unsigned i=0;i<count;i++) {
+            const char *text="Restaurar solo archivos";
+            if(i==0)text="Cancelar";
+            else if(review->discard_pending)text="Continuar eliminacion del plan mostrado";
+            else if(can_delete&&i==1)text="Restaurar + apartar TODOS temporalmente";
+            else if(can_delete&&i==2)text="Restaurar y eliminar TODOS los mostrados";
+            gfx_con_setcol(i==selected?NEON_GREEN:TXT_CLR_DEFAULT,1,BG);
+            guardian_ui_printf("  %s %s\n\n",i==selected?">":" ",text);
+        }
+        gfx_con_setcol(TXT_CLR_DEFAULT,1,BG);guardian_ui_puts("  VOL: elegir | POWER: confirmar\n");
+        u32 b=wait_buttons();
+        if(b&BTN_VOL_UP)selected=(selected+count-1)%count;
+        if(b&BTN_VOL_DOWN)selected=(selected+1)%count;
+        if(b&BTN_POWER) {
+            if(!selected)return 0;
+            if(review->discard_pending)return 1;
+            if(can_delete&&selected==1)return 3;
+            if(can_delete&&selected==2)return 1;
+            return 2;
+        }
+    }
+}
 static void restore_system(void) {
     if (!can_write()) return;
     /* Finish only backup-directory promotion first, so the firmware shown in
@@ -165,14 +246,34 @@ static void restore_system(void) {
     }
     memcpy(backup_firmware,r.info.firmware,sizeof(backup_firmware));
     backup_firmware[sizeof(backup_firmware)-1]=0;
-    if (confirm("Restaurar respaldo","La copia definitiva ya esta verificada.",1)) {
-        header("Restaurando"); show_result(gc_restore(&ctx));
+    header("Revisando cambios de arranque");addon_review=ga_inspect(&ctx);
+    if(addon_review.quarantine_pending) {
+        int discard_pending=addon_review.discard_pending;
+        /* Display the COMPLETE original plan, including entries whose purge
+         * already finished; never authorize hidden entries via a fresh scan. */
+        if(ga_pending_review(&ctx,&addon_review)!=0) {
+            addon_review.ok=0;addon_review.quarantine_pending=1;
+            addon_review.discard_pending|=discard_pending;
+            if(!addon_review.message[0])strcpy(addon_review.message,"No se pudo leer el plan confirmado. No se eliminara nada.");
+        }
     }
+    if(!review_restore_changes(&addon_review))return;
+    int choice=choose_restore(&addon_review);if(!choice)return;
+    if(choice==1 && !confirm("Eliminacion definitiva de lo mostrado",
+        "Se eliminaran TODOS los cambios mostrados.\n  No quedara copia recuperable de esos extras.\n  Solo activadores boot2.flag y el tema HOME.\n  Juegos, partidas y switch no se eliminan.",1))return;
+    header(choice==1?"Restaurando y eliminando la seleccion":choice==3?"Apartando temporalmente y restaurando":"Restaurando solo archivos");
+    gr_result recovery=gr_restore_mode(&ctx,choice==2?NULL:&addon_review,choice==1);
+    show_result_detail(recovery.result,recovery.addons_quarantined,recovery.addons_changed);
 }
 static void review_addons(void) {
     if (!matching_backup()) return;
     header("Comparando modulos y tema de HOME");
     addon_review=ga_inspect(&ctx);
+    if(addon_review.discard_pending) {
+        header("Eliminacion definitiva pendiente");
+        guardian_ui_puts("  Ese plan ya autoriza eliminar sus extras.\n  Usa Restaurar para ver la lista completa\n  y continuar. No se puede reactivar ahora.\n");
+        wait_key();return;
+    }
     if (!addon_review.quarantine_pending && (!addon_review.ok || !addon_review.count)) {
         header("Revision de extras"); guardian_ui_printf("  %s\n",addon_review.message); wait_key(); return;
     }
@@ -249,7 +350,15 @@ void guardian_main(void) {
         if (selected==0) { if (matching_backup()) { header("Verificando archivos"); show_result(gc_inspect(&ctx,1)); } }
         else if (selected==1) restore_system();
         else if (selected==2) review_addons();
-        else if (selected==3 && can_write() && confirm("Reactivar extras apartados","No se sustituiran archivos nuevos existentes.",0)) { header("Reactivando extras"); show_addon_result(ga_restore_quarantine(&ctx)); }
+        else if (selected==3 && can_write()) {
+            addon_review=ga_inspect(&ctx);
+            if(addon_review.discard_pending) {
+                header("No se puede reactivar este plan");
+                guardian_ui_puts("  Su eliminacion definitiva ya se autorizo.\n  Usa Restaurar para ver el plan completo\n  y continuar su eliminacion.\n");wait_key();
+            } else if(confirm("Reactivar extras apartados","No se sustituiran archivos nuevos existentes.",0)) {
+                header("Reactivando extras");show_addon_result(ga_restore_quarantine(&ctx));
+            }
+        }
         else if (selected==4 && can_write() && confirm("Recuperar respaldo","Continua una copia interrumpida.",0)) { header("Recuperando respaldo"); show_result(gc_recover_backup(&ctx)); }
     }
 }

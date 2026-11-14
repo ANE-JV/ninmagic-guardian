@@ -1203,9 +1203,11 @@ gc_result gc_create_backup(gc_context *c, unsigned options) {
     goto end;
   }
   if (stat_path(&o, "config/NinMagicGuardian/quarantine/active/plan.txt",
+                &st) != 0 ||
+      stat_path(&o, "config/NinMagicGuardian/quarantine/active/discard.txt",
                 &st) != 0) {
-    fail(&o, "Hay complementos apartados. Reactivalos antes de sustituir el "
-             "respaldo.");
+    fail(&o, "Hay complementos apartados o una eliminacion pendiente. "
+             "Reactivalos o termina la eliminacion antes de sustituir el respaldo.");
     goto end;
   }
   if (recover_promotion(&o))
@@ -1515,6 +1517,64 @@ static int protect_rescue_rollback(operation *o, const manifest *m) {
           owned[i]);
   }
   return 0;
+}
+gc_result gc_restore_preflight(gc_context *c) {
+  operation o;
+  manifest m;
+  gc_result r;
+  gc_stat st;
+  char expected[66], *saved = NULL;
+  size_t n;
+  int pending = 0, ok = 0, found;
+  memset(&m, 0, sizeof m);
+  if (setup(&o, c, 0))
+    goto done;
+  o.preserve_rescue = 1;
+  if (!identity_valid(c->identity)) {
+    fail(&o, "No se pudo identificar esta microSD; no se modificara ningun "
+             "archivo.");
+    goto done;
+  }
+  found = stat_path(&o, PROMOTION, &st);
+  if (found != 0) {
+    fail(&o, "Hay una sustitucion de respaldo pendiente. Usa Recuperar "
+             "respaldo antes de restaurar archivos o apartar extras.");
+    goto done;
+  }
+  if (load(&o, CURRENT, &m, 1) != 1) {
+    if (!o.error[0])
+      fail(&o, "No hay un respaldo verificado para restaurar.");
+    goto done;
+  }
+  if (check_identity(&o, &m))
+    goto done;
+  pending = exists(&o, RESTORE "/pending.txt", GC_FILE);
+  if (pending < 0)
+    goto done;
+  if (pending) {
+    hex(m.digest, 32, expected);
+    expected[64] = '\n';
+    expected[65] = 0;
+    if (read_small(&o, RESTORE "/pending.txt", &saved, &n, 65) || n != 65 ||
+        memcmp(saved, expected, 65)) {
+      fail(&o, "La recuperacion pendiente no corresponde a este respaldo; se "
+               "conservan todos los archivos.");
+      goto done;
+    }
+  }
+  if (protect_rescue_rollback(&o, &m)) {
+    pending = 1;
+    goto done;
+  }
+  ok = 1;
+done:
+  r = result(&o, &m, ok, pending && !ok,
+             "Respaldo, identidad y destinos comprobados. No se ha modificado "
+             "ningun archivo.");
+  free(saved);
+  manifest_free(&m);
+  destroy(&o);
+  return r;
 }
 gc_result gc_restore(gc_context *c) {
   operation o;

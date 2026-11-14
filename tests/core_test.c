@@ -23,6 +23,7 @@
 typedef struct {
   char root[512];
   const char *fault, *fault_path;
+  const char *stat_error_path;
   int fired, writes, fail_write, special_file;
   uint64_t space;
 } host;
@@ -34,6 +35,8 @@ static int hs(void *v, const char *p, gc_stat *s) {
   host *h = v;
   char b[1024];
   struct stat st;
+  if (h->stat_error_path && !strcmp(p, h->stat_error_path))
+    return -1;
   full(h, p, b);
   if (lstat(b, &st)) {
     return errno == ENOENT ? 0 : -1;
@@ -251,6 +254,7 @@ static void fixture(host *h) {
   put(h, "emuMMC/emummc.ini", "[emummc]\nenabled=1\npath=emuMMC/RAW1\n");
 }
 static void test_paths(void) {
+  unsigned options;
   CHECK(gc_safe_path("bootloader/hekate_ipl.ini"));
   CHECK(!gc_safe_path("../atmosphere/package3"));
   CHECK(!gc_safe_path("atmosphere/../Nintendo/a"));
@@ -267,6 +271,10 @@ static void test_paths(void) {
   CHECK(!gc_managed_path("atmosphere/automatic_backups/prod.keys", 3));
   CHECK(gc_managed_path("bootloader/res/bg.bmp", GC_OPT_VISUALS));
   CHECK(!gc_managed_path("bootloader/res/bg.bmp", 0));
+  for (options = 0; options <= 3; options++) {
+    CHECK(!gc_managed_path("switch/JKSV/JKSV.nro", options));
+    CHECK(!gc_managed_path("switch/new-game.nro", options));
+  }
 }
 static void test_sha(void) {
   char h[65];

@@ -1,5 +1,27 @@
 # Cambios
 
+## 0.2.0 — Restauración con revisión del arranque
+
+- Integra la revisión de temas y módulos en Restaurar: muestra los cambios,
+  permite elegirlos y los aparta de forma reversible antes de recuperar archivos.
+- Comprueba copia, identidad SD y diario antes de apartar; reanuda operaciones
+  interrumpidas y conserva los planes y avisos si una fase no termina.
+- Permite restaurar solo archivos con aviso explícito; sin inventario comparable
+  no aparta complementos automáticamente.
+- Añade eliminación definitiva explícita de los elementos apartados, después
+  de recuperar los archivos o tras probar el arranque. Lista completa, segunda
+  confirmación, intención sellada, hashes y reanudación limitada al mismo plan.
+- Mantiene el apartado temporal recomendado para probar sin adivinar el culpable;
+  una eliminación interrumpida no permite reactivar contenido parcial.
+- Actualiza los tres recursos propios del rescatador desde la aplicación con
+  verificación, copias anteriores y diario, sin cambiar el arranque principal.
+- Mantiene compatibilidad con respaldos anteriores. La carpeta switch completa
+  sigue excluida: no se respaldan ni se borran sus NRO, juegos, ports o datos.
+
+Al actualizar desde la aplicación, vuelve a abrirla y elige Preparar rescate en
+Hekate para aplicar también el rescatador incluido. Actualizar no crea un
+respaldo nuevo ni restaura archivos de forma automática.
+
 ## 0.1.3 — Datos del respaldo en el rescatador
 
 - Corrige la presentación del número de archivos, tamaño y fecha del respaldo

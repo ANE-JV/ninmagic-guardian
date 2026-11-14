@@ -1,7 +1,8 @@
 """Prepare Guardian's SD-root ZIP and corresponding source; never uploads.
 
-The NRO updater replaces only its own NRO. Install the full ZIP to update the
-independent Hekate rescue. The user's main Hekate configuration is not replaced.
+The network updater replaces only its own NRO. After confirmation, Prepare
+rescue can safely apply the three embedded rescue resources.
+The SD-root ZIP is an alternative. The main Hekate configuration is not replaced.
 """
 from pathlib import Path
 import hashlib
@@ -66,7 +67,9 @@ def main():
         f"NRO y herramientas: {BASE}/versions/v{VERSION}/{source_name}\n"
         f"Rescatador Hekate y nucleo compartido: {BASE}/versions/v{VERSION}/{rescue_source_name}\n"
         "La consulta de actualizaciones de la app actualiza solo el NRO.\n"
-        "Para actualizar tambien el rescatador, extrae el ZIP completo en la raiz de la SD.\n"
+        "Despues, confirma Preparar rescate para aplicar el rescatador incluido.\n"
+        "Se verifican los tres archivos propios y se conservan los anteriores para reintentar si se interrumpe.\n"
+        "Tambien puedes extraer el ZIP completo en la raiz de la SD. No sustituye la configuracion principal de Hekate.\n"
     ).encode("utf-8")
     payload = {
         "switch/NinMagicGuardian/NinMagic-Guardian.nro": read_file(binary),
@@ -110,7 +113,7 @@ def main():
         "rescue_source_sha256": hashlib.sha256(rescue_source).hexdigest(),
         "rescue_sha256": hashlib.sha256(payload["config/NinMagicGuardian/rescue/ninmagic-guardian-rescue.bin"]).hexdigest(),
         "manifest": prepared["manifest_url"],
-        "updater_scope": "NRO only; use full ZIP for rescue updates",
+        "updater_scope": "Network update replaces NRO only; confirmed Prepare rescue safely upgrades the three embedded rescue resources; full ZIP is an alternative",
         "modifies_main_hekate_configuration": False,
         "public_channel_verified": False,
         "console_installed": False,

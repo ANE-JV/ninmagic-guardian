@@ -109,8 +109,10 @@ void guardian_sd_cids(char raw[33],char sdk[33]) {
 }
 void guardian_fatfs_init(gc_context *c) {
     memset(c,0,sizeof(*c));
-    c->fs=(gc_fs){NULL,fs_stat,fs_list,fs_open,fs_read,fs_write,fs_file_sync,
-        fs_close,fs_mkdir,fs_rename,fs_remove,fs_sync,fs_free,NULL};
+    c->fs=(gc_fs){.user=NULL,.stat=fs_stat,.list=fs_list,.open=fs_open,
+        .read=fs_read,.write=fs_write,.file_sync=fs_file_sync,.close=fs_close,
+        .mkdir=fs_mkdir,.rename=fs_rename,.remove=fs_remove,.sync=fs_sync,
+        .free_space=fs_free,.checkpoint=NULL};
     guardian_cid_hex(c->identity,sd_storage.raw_cid);
     strcpy(c->firmware,"Preboot SD rescue");
     strcpy(c->model,hw_get_chip_id()==GP_HIDREV_MAJOR_T210B01?"Mariko":"Erista");
